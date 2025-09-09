@@ -38,7 +38,7 @@ Grupo 6:
 
 - Stephanie Ángeles — [stephyangeles](https://github.com/stephyangeles)
 - Oscar Rodríguez — [osrodgon](https://github.com/osrodgon)
-- Monserrat González — [monigogo](https://github.com/monigogo)
+- Mónica Gómez — [monigogo](https://github.com/monigogo)
 - Maribel García — [MaribelGR-dev](https://github.com/MaribelGR-dev)
 - Guillermo Halfon — [GHalfbbt](https://github.com/GHalfbbt)
 - Juan Carlos Macías — [juancmacias](https://github.com/juancmacias)
