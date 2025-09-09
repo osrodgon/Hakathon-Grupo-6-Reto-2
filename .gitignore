@@ -1,0 +1,44 @@
+# Archivos y carpetas comunes para ignorar en proyectos de desarrollo
+# Node.js
+node_modules/
+.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.egg-info/
+.env*
+venv/
+
+# VS Code
+.vscode/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de logs
+debug.log
+
+# Otros
+*.bak
+*.swp
+*.swo
+
+# Modelos y datos grandes
+model/
+*.h5
+*.pt
+*.pkl
+*.joblib
+*.csv
+*.tsv
+*.xlsx
+*.json
