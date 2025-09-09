@@ -1,6 +1,6 @@
 # Hakathon Grupo 6 - Reto 2
 
-Este repositorio contiene la solución al Reto 2 del Hakathon para el Grupo 6.
+Este repositorio contiene la solución al Reto 2 del Hakathon "Factoría F5 - Alvearium" el Grupo 6.
 
 ## Estructura del proyecto
 
