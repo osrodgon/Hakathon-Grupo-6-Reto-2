@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
 Agent Package
-Contiene el agente principal y las tareas
+Contiene el agente principal
 """
 
-from agente_coordenadas import main, demo_openstreetmap
-from tareas_madrid import crear_tarea_guia_turistica, crear_tarea_busqueda_lugares
+from .agente_coordenadas import main, openstreetmap
 
 __all__ = [
     'main',
-    'demo_openstreetmap', 
-    'crear_tarea_guia_turistica',
-    'crear_tarea_busqueda_lugares'
+    'openstreetmap'
 ]

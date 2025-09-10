@@ -21,7 +21,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'agent'))
 try:
     from agent.agente_coordenadas import (
         main as agent_main, 
-        demo_openstreetmap, 
+        openstreetmap, 
         crear_llm_gemini, 
         inicializar_vectorstore,
         buscar_lugares_openstreetmap
@@ -174,7 +174,7 @@ async def generate_tourism_guide(query: TourismQuery):
             data={
                 "guide": resultado,
                 "query_params": query.dict(),
-                "sources": ["PDFs", "Internet", "OpenStreetMap"] if query.lat and query.lon else ["PDFs", "Internet"]
+                #"sources": ["PDFs", "Internet", "OpenStreetMap"] if query.lat and query.lon else ["PDFs", "Internet"]
             },
             execution_time=execution_time,
             timestamp=datetime.now()
