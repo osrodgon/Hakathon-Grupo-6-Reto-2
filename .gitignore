@@ -43,14 +43,18 @@ model/
 *.xlsx
 *.json
 
+# Permitir JSON concretos 
+!backend/services/seed_pois.json
+# o todos los JSON de esa carpeta:
+#!backend/services/*.json
+
 img_dataset/
 
 
-# Vectorstore cache
+# Vectorstore cache (solo carpeta, no índices)
 backend/vectorstore_cache/*
 !backend/vectorstore_cache/.gitkeep
 
+# Storage local (solo carpeta, no datos)
 backend/storage/*
 !backend/storage/.gitkeep
-!backend/storage/mongo_store.py
-!backend/storage/sqlite.py
