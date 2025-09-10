@@ -1,0 +1,162 @@
+import { useState, useEffect, useRef } from 'react';
+import { getTimeBasedGreeting } from '../utils/dateUtils';
+
+/**
+ * Hook personalizado para manejar el sistema de chat con el Ratoncito Pérez
+ */
+export const useChat = (userProfile) => {
+  const [chatHistory, setChatHistory] = useState([]);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const chatEndRef = useRef(null);
+
+  // Auto-scroll al final del chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory]);
+
+  /**
+   * Genera respuestas contextuales del Ratoncito Pérez
+   * @param {string} message - Mensaje del usuario
+   * @returns {string} Respuesta del Ratoncito Pérez
+   */
+  const generateRatoncitoPerezResponse = (message) => {
+    const isChild = userProfile.type === 'child';
+    const isEnglish = userProfile.language === 'en';
+    
+    // Respuestas en inglés para niños
+    const childResponsesEN = [
+      "🐭✨ Hello little adventurer! Would you like to play a magical treasure hunt in Madrid?",
+      "How exciting! I know a super fun game in this place. Can you count how many windows you see?",
+      "You have an incredible imagination! Did you know I hide my most precious treasures here?",
+      "I love talking to you! Would you like me to tell you the secret of this magical place?",
+      "🎮 Let's play! Can you find three things that are yellow like my favorite cheese?",
+      "✨ Magic question: If you could fly like me, where in Madrid would you go first?"
+    ];
+
+    // Respuestas en inglés para adultos
+    const parentResponsesEN = [
+      "As a parent, I can tell you this place has a rich cultural history dating back to the 16th century.",
+      "It's interesting how we can combine fun and learning in these emblematic places of Madrid.",
+      "From an educational perspective, this site offers multiple learning opportunities for the whole family.",
+      "Madrid's history can be perfectly appreciated from this strategic point in the city.",
+      "This location offers excellent family activities with educational components suitable for all ages."
+    ];
+
+    // Respuestas en español para niños
+    const childResponsesES = [
+      "🐭✨ ¡Hola pequeño aventurero! ¿Te gustaría jugar a encontrar pistas mágicas por Madrid?",
+      "¡Qué emocionante! Conozco un juego súper divertido en este lugar. ¿Puedes contar cuántas ventanas ves?",
+      "¡Tienes una imaginación increíble! ¿Sabías que aquí escondo mis tesoros más preciados?",
+      "¡Me encanta hablar contigo! ¿Quieres que te cuente el secreto de este lugar mágico?",
+      "🎮 ¡Vamos a jugar! ¿Puedes encontrar tres cosas que sean amarillas como mi queso favorito?",
+      "✨ Pregunta mágica: Si pudieras volar como yo, ¿a dónde irías primero en Madrid?"
+    ];
+
+    // Respuestas en español para adultos
+    const parentResponsesES = [
+      "Como padre/madre, te cuento que este lugar tiene una rica historia cultural que data del siglo XVI.",
+      "Es interesante cómo podemos combinar diversión y aprendizaje en estos lugares emblemáticos de Madrid.",
+      "Desde una perspectiva educativa, este sitio ofrece múltiples oportunidades de aprendizaje para toda la familia.",
+      "La historia de Madrid se puede apreciar perfectamente desde este punto estratégico de la ciudad.",
+      "Este lugar ofrece excelentes actividades familiares con componentes educativos apropiados para todas las edades."
+    ];
+
+    // Seleccionar el array de respuestas apropiado
+    let responses;
+    if (isEnglish) {
+      responses = isChild ? childResponsesEN : parentResponsesEN;
+    } else {
+      responses = isChild ? childResponsesES : parentResponsesES;
+    }
+
+    return responses[Math.floor(Math.random() * responses.length)];
+  };
+
+  /**
+   * Envía un mensaje al chat
+   * @param {string} message - Mensaje a enviar (opcional, usa currentMessage si no se proporciona)
+   */
+  const sendMessage = async (message = currentMessage) => {
+    if (!message.trim()) return;
+
+    const userMsg = {
+      type: 'user',
+      content: message.trim(),
+      timestamp: new Date(),
+      id: Date.now()
+    };
+
+    setChatHistory(prev => [...prev, userMsg]);
+    setCurrentMessage('');
+    setIsTyping(true);
+
+    // Simular tiempo de respuesta del Ratoncito Pérez
+    setTimeout(() => {
+      const response = generateRatoncitoPerezResponse(message);
+      
+      setChatHistory(prev => [...prev, {
+        type: 'ratoncito',
+        content: response,
+        timestamp: new Date(),
+        id: Date.now() + 1
+      }]);
+      
+      setIsTyping(false);
+    }, 1000 + Math.random() * 1500); // Entre 1 y 2.5 segundos
+  };
+
+  /**
+   * Añade un mensaje del sistema (para navegación, etc.)
+   * @param {string} content - Contenido del mensaje
+   */
+  const addSystemMessage = (content) => {
+    setChatHistory(prev => [...prev, {
+      type: 'system',
+      content,
+      timestamp: new Date(),
+      id: Date.now()
+    }]);
+  };
+
+  /**
+   * Limpia todo el historial del chat
+   */
+  const clearChat = () => {
+    setChatHistory([]);
+  };
+
+  /**
+   * Añade mensaje de bienvenida inicial
+   */
+  const addWelcomeMessage = () => {
+    const greeting = getTimeBasedGreeting();
+    const isChild = userProfile.type === 'child';
+    const isEnglish = userProfile.language === 'en';
+    
+    let welcomeMessage;
+    if (isEnglish) {
+      welcomeMessage = isChild 
+        ? `${greeting} little adventurer! 🐭✨ I'm the Tooth Mouse and I'm here to show you the magical secrets of Madrid. Ready for an incredible adventure?`
+        : `${greeting}! I'm here to enrich your family visit to Madrid with fascinating cultural information and stories.`;
+    } else {
+      welcomeMessage = isChild
+        ? `${greeting} pequeño aventurero! 🐭✨ Soy el Ratoncito Pérez y estoy aquí para mostrarte los secretos mágicos de Madrid. ¿Estás listo para una aventura increíble?`
+        : `${greeting}! Estoy aquí para enriquecer su visita familiar a Madrid con información cultural e historias fascinantes.`;
+    }
+
+    addSystemMessage(welcomeMessage);
+  };
+
+  return {
+    chatHistory,
+    currentMessage,
+    setCurrentMessage,
+    isTyping,
+    sendMessage,
+    addSystemMessage,
+    clearChat,
+    addWelcomeMessage,
+    chatEndRef
+  };
+};
