@@ -44,3 +44,13 @@ model/
 *.json
 
 img_dataset/
+
+
+# Vectorstore cache
+backend/vectorstore_cache/*
+!backend/vectorstore_cache/.gitkeep
+
+backend/storage/*
+!backend/storage/.gitkeep
+!backend/storage/mongo_store.py
+!backend/storage/sqlite.py

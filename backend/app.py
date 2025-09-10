@@ -9,11 +9,75 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import uvicorn
-import os
 import sys
 import asyncio
 from datetime import datetime
 import logging
+import os, glob, time, asyncio
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+
+logger = logging.getLogger("app")
+
+
+# helpers para vectorstore de ubicaciones
+def _vstore_dir():
+    # Directorio de la caché FAISS (por defecto backend/vectorstore_cache)
+    return os.getenv("LOCATION_VECTORSTORE_DIR") or os.path.join(os.path.dirname(__file__), "vectorstore_cache")
+
+def _pdf_dir():
+    # Directorio con los PDFs fuente (por defecto backend/pdfs_madrid)
+    return os.getenv("LOCATION_PDF_DIR") or os.path.join(os.path.dirname(__file__), "pdfs_madrid")
+
+def _ttl_days():
+    # TTL (en días) leído de .env; si no se define → sin TTL
+    raw = os.getenv("LOCATION_VECTORSTORE_TTL_DAYS")
+    try:
+        return int(raw) if raw not in (None, "") else None
+    except ValueError:
+        return None
+
+def _cache_exists(d):
+    # ¿Existen ambos archivos de FAISS?
+    return os.path.exists(os.path.join(d, "index.faiss")) and os.path.exists(os.path.join(d, "index.pkl"))
+
+def _cache_age_seconds(d):
+    # Edad (segundos) de la caché (mínima de los dos archivos)
+    f1, f2 = os.path.join(d, "index.faiss"), os.path.join(d, "index.pkl")
+    return time.time() - min(os.path.getmtime(f1), os.path.getmtime(f2))
+
+def _is_stale(d):
+    # ¿Falta la caché o está caducada por TTL?
+    if not _cache_exists(d):
+        return True
+    ttl = _ttl_days()
+    if ttl is None:
+        return False
+    return _cache_age_seconds(d) > ttl * 86400
+
+def _build_vectorstore_sync(logger):
+    # Construye la caché FAISS a partir de los PDFs (bloqueante)
+    d, pdir = _vstore_dir(), _pdf_dir()
+    os.makedirs(d, exist_ok=True)
+    pdfs = sorted(glob.glob(os.path.join(pdir, "*.pdf")))
+    if not pdfs:
+        logger.warning(f"[vectorstore] No hay PDFs en {pdir}; se omite construcción.")
+        return
+    docs = []
+    for pdf in pdfs:
+        docs.extend(PyPDFLoader(pdf).load())
+    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
+    chunks = splitter.split_documents(docs)
+    emb = HuggingFaceEmbeddings(
+        model_name=os.getenv("LOCATION_EMBEDDINGS_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+    )
+    vs = FAISS.from_documents(chunks, emb)
+    vs.save_local(d)
+    logger.info(f"[vectorstore] Guardado en {d}")
+
+
 
 # Agregar el directorio agent al path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'agent'))
@@ -29,6 +93,7 @@ try:
 except ImportError as e:
     print(f"❌ Error importando módulos del agente: {e}")
     sys.exit(1)
+
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -77,6 +142,21 @@ class TourismResponse(BaseModel):
 llm = None
 vectorstore = None
 
+
+# Reconstruye vectorstore ausente/obsoleto (TTL expired)
+@app.on_event("startup")
+async def _ensure_vectorstore():
+    # Construcción SINCRÓNICA solo si falta o está caducado → evita el error del otro startup
+    d = _vstore_dir()
+    if _is_stale(d):
+        logger.info("📚 Vectorstore ausente/obsoleto → reconstruyendo (bloqueante, primera vez)…")
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _build_vectorstore_sync, logger)
+    else:
+        logger.info("📚 Vectorstore presente/fresco → OK")
+    # ✅ marca listo
+    app.state.vectorstore_ready = True
+    
 @app.on_event("startup")
 async def startup_event():
     """Inicializar el agente al arrancar la aplicación"""
@@ -211,6 +291,20 @@ async def get_sample_locations():
         "locations": ubicaciones,
         "timestamp": datetime.now()
     }
+
+
+# Endpoint para verificar el estado del vectorstore o cache de ubicaciones
+@app.get("/vectorstore/status", tags=["vectorstore"])
+def vectorstore_status():
+    d = _vstore_dir()
+    exists = _cache_exists(d)
+    ttl_raw = os.getenv("LOCATION_VECTORSTORE_TTL_DAYS")
+    ttl = int(ttl_raw) if ttl_raw else None
+    age = _cache_age_seconds(d) if exists else None
+    stale = (ttl is not None and age is not None and age > ttl*86400)
+    # Usa el flag; si no existiera por cualquier motivo, cae a un cálculo razonable
+    ready = getattr(app.state, "vectorstore_ready", (exists and not stale))
+    return {"dir": d, "exists": exists, "ttl_days": ttl, "age_seconds": age, "stale": stale, "ready": ready}
 
 # Función para ejecutar el servidor
 def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
