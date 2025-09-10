@@ -27,9 +27,54 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from crewai import Agent, Task, Crew, Process
+from crewai.tools import BaseTool
+from typing import Type
+from pydantic import BaseModel, Field
 
 # Importar tareas desde archivo en la misma carpeta
 from tareas_madrid import crear_tarea_guia_turistica
+
+# Definir herramientas para CrewAI
+class MadridPDFSearchInput(BaseModel):
+    """Input para búsqueda en PDFs de Madrid"""
+    query: str = Field(description="Consulta para buscar en los PDFs de Madrid")
+
+class MadridPDFSearchTool(BaseTool):
+    name: str = "madrid_pdf_search"
+    description: str = "Busca información específica en los PDFs oficiales de Madrid sobre turismo, historia y cultura"
+    args_schema: Type[BaseModel] = MadridPDFSearchInput
+    
+    def _run(self, query: str) -> str:
+        # Esta herramienta se configurará dinámicamente con el vectorstore
+        return "Herramienta de búsqueda en PDFs configurada dinámicamente"
+
+class InternetSearchInput(BaseModel):
+    """Input para búsqueda en Internet"""
+    query: str = Field(description="Consulta para buscar información en Internet")
+
+class InternetSearchTool(BaseTool):
+    name: str = "internet_search"
+    description: str = "Busca información actualizada en Internet sobre Madrid, turismo y actividades"
+    args_schema: Type[BaseModel] = InternetSearchInput
+    
+    def _run(self, query: str) -> str:
+        return buscar_en_internet(query)
+
+class LocationSearchInput(BaseModel):
+    """Input para búsqueda de lugares cercanos"""
+    lat: float = Field(description="Latitud")
+    lon: float = Field(description="Longitud")
+    radius_km: float = Field(default=1.0, description="Radio de búsqueda en kilómetros")
+    category: str = Field(default="turismo", description="Categoría de lugares a buscar")
+
+class LocationSearchTool(BaseTool):
+    name: str = "location_search"
+    description: str = "Busca lugares cercanos usando coordenadas GPS y OpenStreetMap"
+    args_schema: Type[BaseModel] = LocationSearchInput
+    
+    def _run(self, lat: float, lon: float, radius_km: float = 1.0, category: str = "turismo") -> str:
+        radius_meters = int(radius_km * 1000)
+        return buscar_lugares_openstreetmap(lat, lon, radius_meters, category)
 
 def crear_llm_gemini():
     """Configura el LLM Gemini para CrewAI usando litellm"""
@@ -517,9 +562,19 @@ def main(user_query=None, vectorstore=None, llm=None, adulto=None, infantil=None
     if lugares_info:
         info_adicional = f"\n\n🌍 LUGARES CERCANOS (OPENSTREETMAP):\n{lugares_info}"
 
+    # Crear herramientas con información contextual
+    pdf_search_tool = MadridPDFSearchTool()
+    # Configurar la herramienta PDF con el vectorstore actual
+    def pdf_search_with_context(query: str) -> str:
+        return buscar_en_pdfs(vectorstore, query)
+    pdf_search_tool._run = pdf_search_with_context
+
+    internet_search_tool = InternetSearchTool()
+    location_search_tool = LocationSearchTool()
+
     # Crear agente turístico (sin delegación para evitar errores)
-    guia_turistico = Agent(
-        role='Guía Turístico Experto de Madrid',
+    guia_turistico_raton = Agent(
+        role='El ratoncito Pérez experto en turismo de Madrid. Su misión es ayudar a las familias a descubrir la ciudad de manera mágica y educativa.',
         goal='Proporcionar información turística práctica y completa sobre Madrid',
         backstory="""Eres un experto guía turístico de Madrid con años de experiencia. 
         Te especializas en información práctica: ubicaciones exactas, coordenadas GPS, 
@@ -529,20 +584,80 @@ def main(user_query=None, vectorstore=None, llm=None, adulto=None, infantil=None
         verbose=True,
         allow_delegation=False  # Deshabilitado para evitar errores
     )
-    
-    # Crear tarea usando archivo separado
-    tarea_completa = crear_tarea_guia_turistica(
-        agente=guia_turistico,
-        user_query=user_query,
-        pdf_info=pdf_info,
-        web_info=web_info,
-        info_adicional=info_adicional
+    raton_perez_guide = Agent(
+        role="El narrador mágico y guía encantado de la tripulación. Es quien transforma los datos e información en una narrativa cohesiva, emocionante y personalizada para las familias. Se comunica directamente con los usuarios, entregando la experiencia final.",
+        goal="Transformar una visita turística en una aventura mágica e interactiva, mezclando hechos históricos con cuentos fantásticos. Su objetivo es generar asombro, nostalgia y diversión, adaptando la experiencia para conectar a niños y adultos por igual.",
+        backstory="Soy el Ratón Pérez, un mago-creador cuidadoso que vive en el corazón de Madrid. Llevo siglos recolectando dientes, pero también historias, secretos y leyendas de la ciudad. Mi misión no es solo guardar tesoros, sino también compartirlos. He visto la ciudad crecer y cambiar, y ahora, con mis ayudantes, quiero revelar sus misterios y su encanto a todas las familias, convirtiendo cada rincón en un capítulo de un cuento de hadas.",
+        llm=llm,
+        verbose=True,
+        allow_delegation=True
     )
 
-    # Crear y ejecutar crew simplificado
+    madrid_researcher = Agent(
+        role="El historiador y erudito de la tripulación. Su trabajo es investigar, recopilar y validar la información histórica, cultural y curiosa sobre los lugares emblemáticos de Madrid. Es el encargado de proveer los hechos y los datos que el equipo necesita para construir las historias.",
+        goal="Encontrar datos históricos, curiosidades y leyendas auténticas sobre los monumentos, plazas y edificios de Madrid para enriquecer la experiencia de la familia. Su objetivo es asegurar que la narrativa del Ratón Pérez tenga una base sólida y confiable.",
+        backstory="Soy un incansable investigador con un ojo para los detalles. He pasado siglos en los archivos secretos de la Villa y Corte, descubriendo los misterios que se esconden en cada callejuela y cada piedra de la ciudad. Mi pasión es desenterrar los secretos mejor guardados y entregarlos a la tripulación para que la magia del Ratón Pérez sea tan real como la historia misma.",
+        llm=llm,
+        verbose=True,
+        allow_delegation=True,
+        tools=[pdf_search_tool, internet_search_tool]
+    )
+
+    game_designer = Agent(
+        role="El mago de los desafíos y creador de aventuras. Se encarga de diseñar dinámicas de juego divertidas e interactivas que invitan a la familia a explorar y descubrir. Su rol es transformar los datos históricos y las historias mágicas en acertijos, misiones y retos para los niños.",
+        goal="Convertir la visita a cada lugar en un juego o una misión. Su objetivo es proponer actividades que mantengan a los niños (y a los adultos) activos y comprometidos, garantizando que el aprendizaje sea una experiencia inolvidable y llena de diversión.",
+        backstory="Soy el 'cerebro' detrás de las aventuras del Ratón Pérez. Mi hogar está lleno de mapas, lupas y pergaminos secretos. Me encargo de que cada historia tenga un misterio por resolver y cada rincón de Madrid un desafío que superar. He creado juegos para príncipes, exploradores y aventureros de todas las edades, y mi magia consiste en esconder pistas en los lugares más inesperados.",
+        llm=llm,
+        verbose=True,
+        allow_delegation=True,
+        tools=[pdf_search_tool, internet_search_tool, location_search_tool]
+    )
+    
+    # Crear tareas dinámicas basadas en la consulta del usuario
+    research_task_coor = Task(
+        description=(
+            f"Incluye datos históricos, arquitectura, curiosidades y leyendas. "
+            f"Si se proporcionan listado de lugares cercanos {info_adicional} selecciona los mas relevantes y cercanos que se pueda ir a pie."
+        ),
+        expected_output="Crea una lista con los lugares mas relevantes y cercanos que se pueda ir a pie, que no supere los 3000 caracteres",
+        agent=madrid_researcher,
+    )
+    research_task = Task(
+        description=(
+            f"Busca información detallada sobre: {user_query}. "
+            f"Incluye datos históricos, arquitectura, curiosidades y leyendas. "
+            f"Si se proporcionan coordenadas ({lat}, {lon}), busca también lugares cercanos."
+        ),
+        expected_output="Un documento de texto bien estructurado que contenga: Datos Históricos Principales, Curiosidades y Anécdotas, Leyendas Mágicas. Formato: Markdown.",
+        agent=madrid_researcher,
+    )
+
+    game_task = Task(
+        description=(
+            f"Usando la información proporcionada por el Madrid Cultural Researcher sobre: {user_query}, "
+            f"diseña un acertijo o una pista de 'busca el tesoro' que sea divertida para niños de 8 a 12 años. "
+            f"La pista debe estar relacionada con los lugares o actividades mencionadas en la consulta."
+        ),
+        expected_output="Un acertijo o pista bien formulada y un breve texto de apoyo que explique al guía dónde y cómo usarla durante el tour. Formato: Markdown.",
+        agent=game_designer,
+    )
+
+    narrative_task = Task(
+        description=(
+            f"Utilizando la información histórica del Madrid Cultural Researcher y el juego del Adventure Game Designer, "
+            f"crea una narrativa mágica y cautivadora para guiar a una familia sobre: {user_query}. "
+            f"La narrativa debe ser cálida, cercana y llena de asombro. Debe mezclar hechos reales con cuentos fantásticos, "
+            f"apelando a la curiosidad de los niños y a la nostalgia de los adultos. "
+            f"El resultado final debe ser un guion de tour inmersivo que invite a la familia a explorar y descubrir."
+        ),
+        expected_output="Un guion de tour completo en formato de narrativa que incluya: Una introducción, puntos de interés clave con sus datos históricos transformados en historias mágicas, la integración del acertijo o juego, frases que inviten a la exploración y una conclusión emotiva. Formato: Markdown.",
+        agent=raton_perez_guide,
+    )
+    
+    # Crear y ejecutar crew con los nuevos agentes
     crew = Crew(
-        agents=[guia_turistico],
-        tasks=[tarea_completa],
+        agents=[guia_turistico_raton, madrid_researcher, game_designer, raton_perez_guide],
+        tasks=[research_task_coor, research_task, game_task, narrative_task],
         process=Process.sequential,
         verbose=True
     )
