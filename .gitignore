@@ -42,3 +42,5 @@ model/
 *.tsv
 *.xlsx
 *.json
+
+img_dataset/
