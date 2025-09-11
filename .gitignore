@@ -11,11 +11,21 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.db
-*.sqlite3
 *.egg-info/
 .env*
 venv/
+.venv/
+
+# --- SQLite (BD y ficheros auxiliares)
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Explícitamente:
+backend/storage/*.db
 
 # VS Code
 .vscode/
@@ -43,4 +53,20 @@ model/
 *.xlsx
 *.json
 
+# Mantener JSON concretosde POIs
+!backend/references/pois.json 
+# o todos los JSON de esa carpeta:
+#!backend/services/*.json
+
 img_dataset/
+
+
+# Vectorstore cache (solo carpeta, no índices)
+backend/vectorstore_cache/*
+!backend/vectorstore_cache/.gitkeep
+
+# Storage local (solo carpeta, no datos)
+backend/storage/*
+!backend/storage/.gitkeep
+*.faiss
+*.pkl

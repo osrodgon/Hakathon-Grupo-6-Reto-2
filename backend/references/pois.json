@@ -1,0 +1,38 @@
+[
+  {
+    "id": "poi_casa_perez",
+    "name": "Casa Museo del Ratón Pérez",
+    "lat": 40.4179,
+    "lon": -3.7065,
+    "kids_friendly": true,
+    "accessible": true,
+    "short": "Pequeño museo dedicado al famoso ratoncito."
+  },
+  {
+    "id": "poi_puerta_sol",
+    "name": "Puerta del Sol",
+    "lat": 40.4169,
+    "lon": -3.7035,
+    "kids_friendly": true,
+    "accessible": true,
+    "short": "La plaza más célebre de Madrid."
+  },
+  {
+    "id": "poi_plaza_mayor",
+    "name": "Plaza Mayor",
+    "lat": 40.4155,
+    "lon": -3.7074,
+    "kids_friendly": true,
+    "accessible": true,
+    "short": "Plaza porticada del siglo XVII con mucha historia."
+  },
+  {
+    "id": "poi_palacio_real",
+    "name": "Palacio Real de Madrid",
+    "lat": 40.4179,
+    "lon": -3.7143,
+    "kids_friendly": true,
+    "accessible": true,
+    "short": "Residencia oficial de los reyes, hoy de uso ceremonial."
+  }
+]
