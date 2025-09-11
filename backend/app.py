@@ -18,6 +18,18 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession  # OJO: SQLModel, no SQLAlchemy
+
+
+# === imports para la BD/servicios (añadir) ===
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Depends
+
+from models.database import init_db, get_session
+from services.seed_pois import seed_pois_if_needed
+from services.location_service import save_location, prune_expired
+from services.recommend_service import top_pois
 
 logger = logging.getLogger("app")
 
@@ -136,7 +148,14 @@ class TourismResponse(BaseModel):
     execution_time: Optional[float] = None
     timestamp: datetime
 
-
+class LocationIn(BaseModel):
+    user_id: str
+    latitude: float
+    longitude: float
+    age_range: Optional[str] = None       # "4-6" | "7-9" | "10-12"
+    pmr: bool = False
+    radius_m: int = 1000
+    profile_type: Optional[str] = None    # "parent" | "child"
 
 # Variables globales para el agente
 llm = None
@@ -172,6 +191,13 @@ async def startup_event():
         # Inicializar vectorstore
         logger.info("📚 Inicializando vectorstore...")
         vectorstore = inicializar_vectorstore()
+
+        # === Inicialización de BD + semillas + limpieza TTL ===
+        logger.info("🗄️ Inicializando base de datos SQLite...")
+        await init_db()
+        await seed_pois_if_needed()
+        await prune_expired()
+
 
         logger.info("✅ Ratoncito Pérez API iniciado correctamente")
 
@@ -306,6 +332,86 @@ def vectorstore_status():
     ready = getattr(app.state, "vectorstore_ready", (exists and not stale))
     return {"dir": d, "exists": exists, "ttl_days": ttl, "age_seconds": age, "stale": stale, "ready": ready}
 
+@app.post("/users/location")
+async def users_location(loc: LocationIn):
+    """Guardar ubicación con TTL (por defecto 3 días; o usa DB_TTL_DAYS si la pones en .env)"""
+    import os
+    ttl = int(os.getenv("DB_TTL_DAYS", "3"))
+    if ttl <= 0:
+        ttl = 3
+    await save_location(
+        user_id=loc.user_id,
+        lat=loc.latitude,
+        lon=loc.longitude,
+        ttl_days=ttl,
+        profile_type=loc.profile_type,
+        has_mobility_issues=loc.pmr,
+        age_range=loc.age_range,
+    )
+    return {"ok": True}
+
+@app.post("/recommendations")
+async def recommendations(loc: LocationIn, session: AsyncSession = Depends(get_session)):
+    """TOP 3 POIs por distancia + ajuste PMR/edad (scoring sencillo)"""
+    pois = await top_pois(
+        session=session,
+        lat=loc.latitude,
+        lon=loc.longitude,
+        radius_m=loc.radius_m,
+        pmr=loc.pmr,
+        age_range=loc.age_range,
+        k=3
+    )
+    return {"top": pois}
+
+
+# === ENDPOINTS DEDEBUG/INSPECCIÓN DE BD (SQLite) ===
+# Solo para desarrollo; en producción deshabilitar o proteger
+
+
+@app.get("/debug/db/summary")
+async def db_summary(session: SQLModelAsyncSession = Depends(get_session)):
+    try:
+        from models.entities import POI, User, UserLocation
+        poi = (await session.exec(select(POI))).all()
+        usr = (await session.exec(select(User))).all()
+        loc = (await session.exec(select(UserLocation))).all()
+        return {"poi": len(poi), "users": len(usr), "user_locations": len(loc)}
+    except Exception as e:
+        logger.exception("db_summary failed")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.get("/debug/db/pois")
+async def db_pois(session: SQLModelAsyncSession = Depends(get_session)):
+    try:
+        from models.entities import POI
+        rows = (await session.exec(select(POI))).all()
+        return [{"id":r.id, "name":r.name, "lat":r.latitude, "lon":r.longitude} for r in rows]
+    except Exception as e:
+        logger.exception("db_pois failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/debug/db/user/{user_id}/locations")
+async def db_user_locations(user_id: str, session: SQLModelAsyncSession = Depends(get_session)):
+    try:
+        from models.entities import UserLocation
+        rows = (await session.exec(
+            select(UserLocation).where(UserLocation.user_id == user_id).order_by(UserLocation.created_at.desc())
+        )).all()
+        return [
+            {"id":r.id, "lat":r.latitude, "lon":r.longitude,
+             "created_at":r.created_at.isoformat(), "expires_at":r.expires_at.isoformat()}
+            for r in rows
+        ]
+    except Exception as e:
+        logger.exception("db_user_locations failed")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# =====================   
+# ===== FIN DEBUG =====
+
+
 # Función para ejecutar el servidor
 def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
     """
@@ -336,3 +442,4 @@ if __name__ == "__main__":
         port=8000,
         reload=True
     )
+

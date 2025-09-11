@@ -11,11 +11,20 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.db
-*.sqlite3
 *.egg-info/
 .env*
 venv/
+
+# --- SQLite (BD y ficheros auxiliares)
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Explícitamente:
+backend/storage/*.db
 
 # VS Code
 .vscode/
@@ -43,8 +52,8 @@ model/
 *.xlsx
 *.json
 
-# Permitir JSON concretos 
-!backend/services/seed_pois.json
+# Mantener JSON concretosde POIs
+!backend/references/pois.json 
 # o todos los JSON de esa carpeta:
 #!backend/services/*.json
 

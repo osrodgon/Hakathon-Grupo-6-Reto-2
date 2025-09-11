@@ -35,3 +35,8 @@ aiofiles>=23.2.1
 # Configuración y utilidades
 python-dotenv>=1.0.0
 
+# Base de datos y ORM
+sqlmodel
+sqlalchemy>=2.0
+aiosqlite
+
