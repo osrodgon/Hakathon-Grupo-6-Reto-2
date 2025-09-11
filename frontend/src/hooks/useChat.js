@@ -130,22 +130,53 @@ export const useChat = (userProfile) => {
    * Añade mensaje de bienvenida inicial
    */
   const addWelcomeMessage = () => {
-    const greeting = getTimeBasedGreeting();
-    const isChild = userProfile.type === 'child';
-    const isEnglish = userProfile.language === 'en';
-    
-    let welcomeMessage;
-    if (isEnglish) {
-      welcomeMessage = isChild 
-        ? `${greeting} little adventurer! 🐭✨ I'm the Tooth Mouse and I'm here to show you the magical secrets of Madrid. Ready for an incredible adventure?`
-        : `${greeting}! I'm here to enrich your family visit to Madrid with fascinating cultural information and stories.`;
-    } else {
-      welcomeMessage = isChild
-        ? `${greeting} pequeño aventurero! 🐭✨ Soy el Ratoncito Pérez y estoy aquí para mostrarte los secretos mágicos de Madrid. ¿Estás listo para una aventura increíble?`
-        : `${greeting}! Estoy aquí para enriquecer su visita familiar a Madrid con información cultural e historias fascinantes.`;
-    }
+    // Solo agregar si no hay mensajes ya en el historial
+    setChatHistory(prev => {
+      if (prev.length > 0) {
+        console.log('Ya hay mensajes, no agregar bienvenida duplicada');
+        return prev; // No agregar si ya hay mensajes
+      }
+      
+      const greeting = getTimeBasedGreeting();
+      const isChild = userProfile.type === 'child';
+      const isEnglish = userProfile.language === 'en';
+      
+      let welcomeMessage;
+      if (isEnglish) {
+        welcomeMessage = isChild 
+          ? `${greeting} little adventurer! 🐭✨ I'm the Tooth Mouse and I'm here to show you the magical secrets of Madrid. Ready for an incredible adventure?`
+          : `${greeting}! I'm here to enrich your family visit to Madrid with fascinating cultural information and stories.`;
+      } else {
+        welcomeMessage = isChild
+          ? `${greeting} pequeño aventurero! 🐭✨ Soy el Ratoncito Pérez y estoy aquí para mostrarte los secretos mágicos de Madrid. ¿Estás listo para una aventura increíble?`
+          : `${greeting}! Estoy aquí para enriquecer su visita familiar a Madrid con información cultural e historias fascinantes.`;
+      }
 
-    addSystemMessage(welcomeMessage);
+      return [{
+        type: 'ratoncito',
+        content: welcomeMessage,
+        timestamp: new Date(),
+        id: Date.now()
+      }];
+    });
+  };
+
+  /**
+   * Actualiza el historial de chat directamente
+   * @param {Array} newHistory - Nuevo historial completo
+   */
+  const updateChatHistory = (newHistory) => {
+    console.log('🔥 updateChatHistory llamado en useChat:', newHistory);
+    setChatHistory(newHistory);
+  };
+
+  /**
+   * Añade un mensaje al historial de chat
+   * @param {Object} message - Mensaje a añadir
+   */
+  const addMessage = (message) => {
+    console.log('🔥 addMessage llamado en useChat:', message);
+    setChatHistory(prev => [...prev, message]);
   };
 
   return {
@@ -157,6 +188,9 @@ export const useChat = (userProfile) => {
     addSystemMessage,
     clearChat,
     addWelcomeMessage,
-    chatEndRef
+    chatEndRef,
+    // ✅ NUEVAS funciones para actualizar el historial
+    updateChatHistory,
+    addMessage
   };
 };

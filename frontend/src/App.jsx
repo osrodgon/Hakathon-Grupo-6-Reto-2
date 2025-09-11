@@ -40,7 +40,9 @@ const App = () => {
     addSystemMessage,
     clearChat,
     addWelcomeMessage,
-    chatEndRef
+    chatEndRef,
+    updateChatHistory,
+    addMessage
   } = useChat(userProfile);
 
   // Obtener ubicación del usuario al iniciar la aplicación
@@ -115,10 +117,24 @@ const App = () => {
    * Función para actualizar datos del chat
    */
   const setChatData = (updater) => {
+    console.log('🔥 setChatData llamado en App.jsx');
+    console.log('🔥 chatData actual:', chatData);
+    
     if (typeof updater === 'function') {
       const newData = updater(chatData);
-      if (newData.currentMessage !== undefined) {
+      console.log('🔥 newData calculado:', newData);
+      
+      // Actualizar currentMessage si cambió
+      if (newData.currentMessage !== undefined && newData.currentMessage !== chatData.currentMessage) {
+        console.log('🔥 Actualizando currentMessage:', newData.currentMessage);
         setCurrentMessage(newData.currentMessage);
+      }
+      
+      // ✅ ARREGLO: Actualizar chatHistory si cambió
+      if (newData.chatHistory !== undefined && newData.chatHistory !== chatData.chatHistory) {
+        console.log('🔥 Actualizando chatHistory, nueva longitud:', newData.chatHistory.length);
+        console.log('🔥 Usando updateChatHistory del hook useChat');
+        updateChatHistory(newData.chatHistory);
       }
     }
   };
@@ -159,7 +175,6 @@ const App = () => {
             userProfile={userProfile}
             chatData={chatData}
             setChatData={setChatData}
-            sendMessage={sendMessage}
             chatEndRef={chatEndRef}
             isTyping={isTyping}
           />
