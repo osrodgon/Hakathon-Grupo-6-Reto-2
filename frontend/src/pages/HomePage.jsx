@@ -1,9 +1,10 @@
-import React from 'react';
-import { MessageCircle, Map, Gift, Sparkles, Calendar, MapPin } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageCircle, Map, Gift, Sparkles, Calendar, MapPin, Cloud } from 'lucide-react';
 import Button from '../components/common/Button';
 import Card, { CardTitle, CardContent } from '../components/common/Card';
-import { COLORS } from '../config/constants';
+import { COLORS, API_CONFIG } from '../config/constants';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
+import { getCurrentLocation } from '../utils/locationUtils';
 
 /**
  * Página principal de la aplicación
@@ -14,6 +15,49 @@ import { getTimeBasedGreeting } from '../utils/dateUtils';
  * @param {function} props.getPersonalizedGreeting - Función para obtener saludo personalizado
  */
 const HomePage = ({ userProfile, onNavigate, getPersonalizedGreeting }) => {
+  
+  // Estado para el pronóstico del tiempo
+  const [forecast, setForecast] = useState(null);
+  const [isLoadingWeather, setIsLoadingWeather] = useState(false);
+
+  /**
+   * Obtiene el pronóstico del tiempo desde el backend
+   */
+  const getForecast = async () => {
+    try {
+      setIsLoadingWeather(true);
+      
+      // Obtener ubicación del usuario
+      const location = await getCurrentLocation();
+      
+      // Llamar al endpoint /forecast
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}/forecast?lat=${location.lat}&lon=${location.lng}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setForecast(data);
+      } else {
+        console.error('Error obteniendo pronóstico:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error en la llamada al pronóstico:', error);
+    } finally {
+      setIsLoadingWeather(false);
+    }
+  };
+
+  // Obtener pronóstico al cargar el componente
+  useEffect(() => {
+    getForecast();
+  }, []);
   
   /**
    * Obtiene el juego o actividad del día según el tipo de usuario
@@ -59,26 +103,39 @@ const HomePage = ({ userProfile, onNavigate, getPersonalizedGreeting }) => {
   };
 
   /**
-   * Obtiene recomendaciones basadas en la hora del día
+   * Obtiene recomendaciones basadas en la hora del día y el clima
    */
   const getTimeBasedRecommendation = () => {
     const hour = new Date().getHours();
     const isChild = userProfile.type === 'child';
     const isEnglish = userProfile.language === 'en';
 
+    // Crear recomendación base según la hora
+    let baseRecommendation = '';
     if (hour < 12) {
-      return isEnglish
+      baseRecommendation = isEnglish
         ? (isChild ? "Perfect morning for a treasure hunt in Retiro Park!" : "Great time to visit museums before they get crowded")
         : (isChild ? "¡Mañana perfecta para buscar tesoros en el Retiro!" : "Buen momento para visitar museos antes de las multitudes");
     } else if (hour < 18) {
-      return isEnglish
+      baseRecommendation = isEnglish
         ? (isChild ? "Afternoon adventure at Plaza Mayor awaits!" : "Ideal time for a family walk through historic Madrid")
         : (isChild ? "¡Aventura de tarde en la Plaza Mayor te espera!" : "Momento ideal para un paseo familiar por el Madrid histórico");
     } else {
-      return isEnglish
+      baseRecommendation = isEnglish
         ? (isChild ? "Evening magic at Templo de Debod!" : "Beautiful sunset views from Madrid's rooftops")
         : (isChild ? "¡Magia nocturna en el Templo de Debod!" : "Hermosas vistas del atardecer desde las azoteas de Madrid");
     }
+
+    // Añadir información del clima si está disponible
+    if (forecast) {
+      const weatherInfo = isEnglish 
+        ? ` The weather today is ${forecast.forecast} with temperatures between ${Math.round(forecast.min)}°C and ${Math.round(forecast.max)}°C.`
+        : ` El clima hoy es ${forecast.forecast} con temperaturas entre ${Math.round(forecast.min)}°C y ${Math.round(forecast.max)}°C.`;
+      
+      return baseRecommendation + weatherInfo;
+    }
+
+    return baseRecommendation;
   };
 
   return (
@@ -168,6 +225,64 @@ const HomePage = ({ userProfile, onNavigate, getPersonalizedGreeting }) => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Información del clima */}
+        {forecast && (
+          <Card>
+            <CardContent>
+              <div 
+                className="p-4 rounded-lg"
+                style={{ backgroundColor: COLORS.PRIMARY_YELLOW }}
+              >
+                <div className="flex items-start gap-3">
+                  <Cloud 
+                    className="w-6 h-6 flex-shrink-0 mt-1"
+                    style={{ color: COLORS.PRIMARY_BROWN }} 
+                  />
+                  <div>
+                    <h3 
+                      className="font-bold font-title mb-2"
+                      style={{ color: COLORS.PRIMARY_BROWN }}
+                    >
+                      {userProfile.language === 'en' 
+                        ? '🌤️ Today\'s Weather' 
+                        : '🌤️ Clima de Hoy'
+                      }
+                    </h3>
+                    <p 
+                      className="text-sm font-body"
+                      style={{ color: COLORS.BLACK }}
+                    >
+                      {forecast.forecast} • {Math.round(forecast.min)}°C - {Math.round(forecast.max)}°C
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Loading del clima */}
+        {isLoadingWeather && !forecast && (
+          <Card>
+            <CardContent>
+              <div 
+                className="p-4 rounded-lg text-center"
+                style={{ backgroundColor: COLORS.GRAY_LIGHT }}
+              >
+                <p 
+                  className="text-sm font-body"
+                  style={{ color: COLORS.BLACK }}
+                >
+                  {userProfile.language === 'en' 
+                    ? '🌤️ Loading weather...' 
+                    : '🌤️ Cargando clima...'
+                  }
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Actividad del día */}
         <Card hoverable>
