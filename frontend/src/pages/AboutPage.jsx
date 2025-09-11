@@ -3,6 +3,7 @@ import { Star, Heart, Users, Crown, Gift, Sparkles } from 'lucide-react';
 import Card, { CardTitle, CardContent } from '../components/common/Card';
 import Button from '../components/common/Button';
 import { COLORS } from '../config/constants';
+import app3 from '../images/app3.png';
 
 /**
  * Página "Sobre Nosotros" con información del proyecto y equipo
@@ -66,14 +67,13 @@ const AboutPage = ({ userProfile, onNavigate }) => {
       className="min-h-screen p-6"
       style={{ backgroundColor: COLORS.BACKGROUND }}
     >
-      <div className="max-w-md mx-auto space-y-6">
-        
-        {/* Encabezado */}
+      <div className="max-w-md mx-auto space-y-6">        {/* Encabezado */}
         <div className="text-center mb-8">
-          <div className="animate-bounce-soft mb-4">
-            <Star 
-              className="w-16 h-16 mx-auto"
-              style={{ color: COLORS.PRIMARY_BROWN }} 
+          <div className="animate-bounce-soft mb-2">
+            <img 
+              src={app3} 
+              alt="Logo Sobre Nosotros" 
+              className="w-50 h-50 mx-auto object-contain"
             />
           </div>
           <h1 
