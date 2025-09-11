@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, Heart, Users, Crown, Gift, Sparkles } from 'lucide-react';
+import { Star, Heart, Users, Crown, Gift, Sparkles, User } from 'lucide-react';
 import Card, { CardTitle, CardContent } from '../components/common/Card';
 import Button from '../components/common/Button';
 import { COLORS } from '../config/constants';
@@ -12,25 +12,62 @@ import app3 from '../images/app3.png';
  * @param {function} props.onNavigate - Función de navegación
  */
 const AboutPage = ({ userProfile, onNavigate }) => {
-  
-  /**
+    /**
    * Información del equipo de desarrollo
    */
   const teamMembers = [
     {
-      name: "Equipo Madrid Mágico",
-      role: userProfile.language === 'en' ? "Developers & Storytellers" : "Desarrolladores y Narradores",
+      name: "Stephany Ángeles Lizárraga",
+      role: userProfile.language === 'en' ? "Frontend Developer" : "Desarrolladora Frontend",
+      github: "stephyangeles",
       description: userProfile.language === 'en' 
-        ? "Passionate about creating magical experiences that combine culture and fun"
-        : "Apasionados por crear experiencias mágicas que combinan cultura y diversión",
+        ? "Creates magical user interfaces and seamless user experiences"
+        : "Crea interfaces mágicas y experiencias de usuario fluidas",
       icon: Heart
     },
     {
-      name: "Ratoncito Pérez",
-      role: userProfile.language === 'en' ? "Chief Magical Officer" : "Director de Magia",
+      name: "Oscar Rodriguez",
+      role: userProfile.language === 'en' ? "Backend Developer" : "Desarrollador Backend",
+      github: "osrodgon",
       description: userProfile.language === 'en'
-        ? "Our beloved virtual guide who brings Madrid to life with incredible stories"
-        : "Nuestro querido guía virtual que hace que Madrid cobre vida con historias increíbles",
+        ? "Builds robust APIs and server-side magic for our adventures"
+        : "Construye APIs robustas y magia del lado del servidor para nuestras aventuras",
+      icon: User
+    },
+    {
+      name: "Monica G",
+      role: userProfile.language === 'en' ? "UI/UX Designer" : "Diseñadora UI/UX",
+      github: "monigogo",
+      description: userProfile.language === 'en'
+        ? "Designs beautiful and intuitive experiences for all adventurers"
+        : "Diseña experiencias hermosas e intuitivas para todos los aventureros",
+      icon: Sparkles
+    },
+    {
+      name: "Maribel Gutiérrez",
+      role: userProfile.language === 'en' ? "Full Stack Developer" : "Desarrolladora Full Stack",
+      github: "MaribelGR-dev",
+      description: userProfile.language === 'en'
+        ? "Masters both frontend and backend to create complete magical solutions"
+        : "Domina tanto frontend como backend para crear soluciones mágicas completas",
+      icon: Gift
+    },
+    {
+      name: "Alfonso Bermúdez",
+      role: userProfile.language === 'en' ? "DevOps Engineer" : "Ingeniero DevOps",
+      github: "GHalfbbt",
+      description: userProfile.language === 'en'
+        ? "Ensures our magical platform runs smoothly and scales beautifully"
+        : "Asegura que nuestra plataforma mágica funcione sin problemas y escale hermosamente",
+      icon: Users
+    },
+    {
+      name: "Juan Carlos Macías",
+      role: userProfile.language === 'en' ? "Tech Lead & AI Engineer" : "Líder Técnico e Ingeniero de IA",
+      github: "juancmacias",
+      description: userProfile.language === 'en'
+        ? "Leads our technical vision and brings AI magic to enhance user experiences"
+        : "Lidera nuestra visión técnica y aporta magia de IA para mejorar las experiencias de usuario",
       icon: Crown
     }
   ];
@@ -167,14 +204,29 @@ const AboutPage = ({ userProfile, onNavigate }) => {
                           className="w-6 h-6"
                           style={{ color: COLORS.WHITE }} 
                         />
-                      </div>
-                      <div>
-                        <h3 
-                          className="font-title font-bold text-lg"
-                          style={{ color: COLORS.PRIMARY_BROWN }}
-                        >
-                          {member.name}
-                        </h3>
+                      </div>                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 
+                            className="font-title font-bold text-lg"
+                            style={{ color: COLORS.PRIMARY_BROWN }}
+                          >
+                            {member.name}
+                          </h3>
+                          {member.github && (
+                            <a
+                              href={`https://github.com/${member.github}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-2 py-1 rounded-full hover:opacity-80 transition-opacity"
+                              style={{ 
+                                backgroundColor: COLORS.PRIMARY_YELLOW,
+                                color: COLORS.SECONDARY_RED
+                              }}
+                            >
+                              @{member.github}
+                            </a>
+                          )}
+                        </div>
                         <p 
                           className="font-body text-sm font-semibold mb-2"
                           style={{ color: COLORS.SECONDARY_BLUE }}
