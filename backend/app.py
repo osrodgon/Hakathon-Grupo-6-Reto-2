@@ -4,7 +4,7 @@ FastAPI Application para el Agente Turístico de Madrid
 Backend API REST para el agente CrewAI con Gemini + PDFs + OpenStreetMap
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -324,7 +324,7 @@ async def get_sample_locations():
     return {
         "success": True,
         "locations": ubicaciones,
-        "timestamp": datetime.now()
+        "timestamp": datetime.now().isoformat()
     }
 
 
@@ -341,42 +341,6 @@ def vectorstore_status():
     ready = getattr(app.state, "vectorstore_ready", (exists and not stale))
     return {"dir": d, "exists": exists, "ttl_days": ttl, "age_seconds": age, "stale": stale, "ready": ready}
 
-# === ENDPOINTS PRINCIPALES: Ubicación + Recomendaciones ===
-@app.post("/users/location")
-async def users_location(loc: LocationIn):
-    """Guardar ubicación con TTL (por defecto 3 días; o usa DB_TTL_DAYS si la pones en .env)"""
-    import os
-    ttl = int(os.getenv("DB_TTL_DAYS", "3"))
-    if ttl <= 0:
-        ttl = 3
-    await save_location(
-        user_id=loc.user_id,
-        lat=loc.latitude,
-        lon=loc.longitude,
-        ttl_days=ttl,
-        profile_type=loc.profile_type,
-        has_mobility_issues=loc.pmr,
-        age_range=loc.age_range,
-    )
-    return {"ok": True}
-
-@app.post("/recommendations")
-async def recommendations(loc: LocationIn, session: AsyncSession = Depends(get_session)):
-    """TOP 3 POIs por distancia + ajuste PMR/edad (scoring sencillo)"""
-    pois = await top_pois(
-        session=session,
-        lat=loc.latitude,
-        lon=loc.longitude,
-        radius_m=loc.radius_m,
-        pmr=loc.pmr,
-        age_range=loc.age_range,
-        k=3
-    )
-    return {"top": pois}
-
-
-# === ENDPOINTS DEDEBUG/INSPECCIÓN DE BD (SQLite) ===
-# Solo para desarrollo; en producción deshabilitar o proteger
 
 @app.get("/debug/db/summary")
 async def db_summary():
