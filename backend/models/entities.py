@@ -26,3 +26,11 @@ class POI(SQLModel, table=True):
     accessible: bool = True
     short: Optional[str] = None
     source: Optional[str] = None
+
+class ChatTurn(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(index=True)     # ← guardamos el id del usuario
+    prompt: str
+    response: str
+    model: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

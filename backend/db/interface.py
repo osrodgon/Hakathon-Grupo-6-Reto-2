@@ -10,3 +10,19 @@ class Storage:
                        pmr:bool, age_range:Optional[str], k:int) -> List[Dict]: ...
     async def summary(self) -> Dict: ...
     async def prune_expired(self) -> None: ...
+
+    async def ensure_user(self, user_id: str,
+                          profile_type: Optional[str] = None,
+                          has_mobility_issues: Optional[bool] = None,
+                          age_range: Optional[str] = None) -> None:
+        raise NotImplementedError
+
+    async def save_chat_turn(self, user_id: str, prompt: str, response: str,
+                             model: Optional[str] = None) -> str:
+        raise NotImplementedError
+
+    async def get_chat_history(self, user_id: str, limit: int = 20) -> List[Dict]:
+        raise NotImplementedError
+
+    async def get_chat_turn(self, turn_id: str) -> Optional[Dict]:
+        raise NotImplementedError

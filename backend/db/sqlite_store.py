@@ -13,7 +13,7 @@ from services.recommend_service import haversine_m
 # db.AsyncSessionLocal se actualiza tras init_db()
 from models import database as db
 
-from models.entities import POI, User, UserLocation
+from models.entities import POI, User, UserLocation, ChatTurn
 
 POIS_PATH = Path(os.getenv("POIS_PATH", "backend/references/pois.json"))
 
@@ -115,3 +115,60 @@ class SQLiteStore(Storage):
                 delete(UserLocation).where(UserLocation.expires_at < datetime.utcnow())
             )
             await s.commit()
+
+    async def ensure_user(self, user_id: str,
+                          profile_type=None, has_mobility_issues=None, age_range=None) -> None:
+        if db.AsyncSessionLocal is None:
+            await db.init_db()
+        async with db.AsyncSessionLocal() as s:
+            u = await s.get(User, user_id)
+            if not u:
+                u = User(id=user_id,
+                         profile_type=profile_type,
+                         has_mobility_issues=bool(has_mobility_issues or False),
+                         age_range=age_range)
+                s.add(u)
+            else:
+                if profile_type: u.profile_type = profile_type
+                if has_mobility_issues is not None: u.has_mobility_issues = has_mobility_issues
+                if age_range: u.age_range = age_range
+            await s.commit()
+
+    async def save_chat_turn(self, user_id: str, prompt: str, response: str, model: str | None = None) -> str:
+        if db.AsyncSessionLocal is None:
+            await db.init_db()
+        async with db.AsyncSessionLocal() as s:
+            row = ChatTurn(user_id=user_id, prompt=prompt, response=response, model=model)
+            s.add(row)
+            await s.commit()
+            await s.refresh(row)
+            return str(row.id)
+
+    async def get_chat_history(self, user_id: str, limit: int = 20) -> List[Dict]:
+        if db.AsyncSessionLocal is None:
+            await db.init_db()
+        async with db.AsyncSessionLocal() as s:
+            q = await s.exec(
+                select(ChatTurn)
+                .where(ChatTurn.user_id == user_id)
+                .order_by(ChatTurn.created_at.desc())
+                .limit(limit)
+            )
+            rows = q.all()
+        return [{
+            "id": str(r.id), "user_id": r.user_id,
+            "prompt": r.prompt, "response": r.response,
+            "model": r.model, "created_at": r.created_at.isoformat()
+        } for r in rows]
+
+    async def get_chat_turn(self, turn_id: str) -> Optional[Dict]:
+        if db.AsyncSessionLocal is None:
+            await db.init_db()
+        async with db.AsyncSessionLocal() as s:
+            row = await s.get(ChatTurn, int(turn_id))
+            if not row: return None
+            return {
+                "id": str(row.id), "user_id": row.user_id,
+                "prompt": row.prompt, "response": row.response,
+                "model": row.model, "created_at": row.created_at.isoformat()
+            }

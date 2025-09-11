@@ -4,14 +4,14 @@ FastAPI Application para el Agente Turístico de Madrid
 Backend API REST para el agente CrewAI con Gemini + PDFs + OpenStreetMap
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import uvicorn
 import sys
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import os, glob, time
 from langchain_community.document_loaders import PyPDFLoader
@@ -165,6 +165,24 @@ class LocationIn(BaseModel):
     radius_m: int = 1000
     profile_type: Optional[str] = None    # "parent" | "child"
 
+class ChatIn(BaseModel):
+    user_id: str
+    prompt: str
+    profile_type: str | None = None
+    pmr: bool | None = None
+    age_range: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+
+class ChatOut(BaseModel):
+    id: str
+    user_id: str
+    prompt: str
+    response: str
+    model: str | None = None
+    created_at: str
+
+
 # Variables globales para el estado del agente
 llm = None
 vectorstore = None
@@ -302,7 +320,51 @@ async def generate_tourism_guide(query: TourismQuery):
             detail=f"Error interno generando guía turística: {str(e)}"
         )
 
+async def run_agent(prompt: str, context: dict) -> tuple[str, str]:
+    # Sustituye por tu CrewAI real
+    model_name = "perez-crew-stub"
+    resp = f"¡Chiiist! Soy el Ratoncito Pérez 🧀. Me dijiste: '{prompt}'. "\
+           f"¿Te apetece visitar mi Casa Museo cerca de Sol?"
+    return resp, model_name
 
+@app.post("/agent/chat", response_model=ChatOut)
+async def agent_chat(payload: ChatIn, request: Request):
+    # DEBUG temporal: imprime lo que ha llegado “en bruto”
+    try:
+        raw = await request.body()
+        print("RAW BODY:", raw[:200])  # primeros bytes
+    except Exception as e:
+        print("Error leyendo body:", e)
+    # Guarda el chat y devuelve la respuesta
+    await store.ensure_user(
+        user_id=payload.user_id,
+        profile_type=payload.profile_type,
+        has_mobility_issues=payload.pmr,
+        age_range=payload.age_range,
+    )
+    ctx = payload.model_dump()
+    response_text, model_name = await run_agent(payload.prompt, ctx)
+    turn_id = await store.save_chat_turn(payload.user_id, payload.prompt, response_text, model=model_name)
+    return ChatOut(
+        id=turn_id,
+        user_id=payload.user_id,
+        prompt=payload.prompt,
+        response=response_text,
+        model=model_name,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+@app.get("/agent/history")
+async def agent_history(user_id: str = Query(...), limit: int = Query(20, ge=1, le=100)):
+    items = await store.get_chat_history(user_id=user_id, limit=limit)
+    return {"user_id": user_id, "items": items}
+
+@app.get("/agent/turn/{turn_id}")
+async def agent_turn(turn_id: str):
+    item = await store.get_chat_turn(turn_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="chat turn not found")
+    return item
 
 
 @app.get("/locations")
