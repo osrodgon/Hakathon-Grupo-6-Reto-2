@@ -15,6 +15,8 @@ import asyncio
 from datetime import datetime
 import logging
 
+from backend.agent.agente_coordenadas import WEATHER_CODES, get_weather_forecast_json
+
 # Agregar el directorio agent al path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'agent'))
 
@@ -70,8 +72,11 @@ class TourismResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
     execution_time: Optional[float] = None
     timestamp: datetime
-
-
+    
+class ForecastResponse(BaseModel):
+    forecast: str
+    max: float
+    min: float
 
 # Variables globales para el agente
 llm = None
@@ -187,7 +192,20 @@ async def generate_tourism_guide(query: TourismQuery):
             detail=f"Error interno generando guía turística: {str(e)}"
         )
 
-
+@app.get("/forecast")
+async def get_forecast(lat: float, lon: float):
+    response = get_weather_forecast_json(lat, lon, 1)
+    
+    if response.status_code == 200:
+        data = response.json().get("daily", {})
+                
+        forecast = WEATHER_CODES.get(data["weather_code"][0], 'Condición desconocida')
+        max = data['temperature_2m_max'][0]
+        min = data['temperature_2m_min'][0]
+        
+        
+        return ForecastResponse(forecast=forecast, max=max, min=min)
+    return response
 
 
 @app.get("/locations")
