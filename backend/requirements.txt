@@ -1,0 +1,37 @@
+# Madrid Tourism Agent - Dependencias Completas
+# ================================================
+# Proyecto de agente turístico de Madrid con CrewAI + FastAPI
+
+# Core CrewAI y LLM
+crewai>=0.177.0
+google-generativeai
+langchain-google-genai
+
+# Procesamiento de documentos y embeddings
+langchain-community>=0.2.12
+langchain-text-splitters
+langchain
+langchain-huggingface>=0.0.3
+transformers
+sentence-transformers
+faiss-cpu>=1.8.0
+pypdf
+
+# Web scraping y requests
+requests>=2.31.0
+beautifulsoup4>=4.12.3
+urllib3
+
+# FastAPI y servidor web
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+python-multipart>=0.0.6
+
+# Utilidades adicionales para la API
+httpx>=0.25.2
+aiofiles>=23.2.1
+
+# Configuración y utilidades
+python-dotenv>=1.0.0
+
