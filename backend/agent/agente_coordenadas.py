@@ -402,7 +402,7 @@ def buscar_lugares_openstreetmap(lat, lon, radius_meters=1000, category="tourism
     except Exception as e:
         return f"❌ Error buscando lugares: {e}"
     
-def get_weather_forecast(latitude: float, longitude: float, forecast_days: int = 3):
+def get_weather_forecast_json(latitude: float, longitude: float, forecast_days: int = 3):
     """
     Obtiene la previsión del tiempo para los próximos días.
 
@@ -418,11 +418,27 @@ def get_weather_forecast(latitude: float, longitude: float, forecast_days: int =
     
     try:
         response = requests.get(url)
-        data = response.json()
+                
+        return response
     except requests.exceptions.RequestException as e:
-        return f"❌ Error al conectar con el servicio de Open-Meteo: {e}"
+        return None
+    
+def get_weather_forecast(latitude: float, longitude: float, forecast_days: int = 3):
+    """
+    Obtiene la previsión del tiempo para los próximos días.
 
-    if response.status_code == 200:
+    Args:
+        latitude (float): La latitud de la ubicación.
+        longitude (float): La longitud de la ubicación.
+        forecast_days (int): El número de días para la previsión.
+
+    Returns:
+        list: Una lista de diccionarios con el pronóstico del tiempo.
+    """
+    
+    data = get_weather_forecast_json(latitude, longitude, forecast_days).json()
+
+    if data:
         # Extraer los datos relevantes
         daily_data = data.get("daily", {})
         forecast = []
