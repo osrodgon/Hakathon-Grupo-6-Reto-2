@@ -13,7 +13,7 @@ import sys
 import asyncio
 from datetime import datetime
 import logging
-import os, glob, time, asyncio
+import os, glob, time
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -21,8 +21,16 @@ from langchain_community.vectorstores import FAISS
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession  # OJO: SQLModel, no SQLAlchemy
 
+# Carga variables de entorno desde .env
+from dotenv import load_dotenv
+load_dotenv()
+
+# Importa el store adecuado según DB_PROVIDER - SQLite o MongoDB
+from db.factory import get_store
+store = get_store()
 
 # === imports para la BD/servicios (añadir) ===
+# SQLModel + SQLite
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
 
@@ -157,7 +165,7 @@ class LocationIn(BaseModel):
     radius_m: int = 1000
     profile_type: Optional[str] = None    # "parent" | "child"
 
-# Variables globales para el agente
+# Variables globales para el estado del agente
 llm = None
 vectorstore = None
 
@@ -184,7 +192,7 @@ async def startup_event():
     logger.info("🚀 Iniciando Ratoncito Pérez API...")
 
     try:
-        # Configurar LLM
+        # Configurar LLM + Vectorstore (para CrewAI)
         logger.info("⚙️ Configurando LLM Gemini...")
         llm = crear_llm_gemini()
         
@@ -193,18 +201,18 @@ async def startup_event():
         vectorstore = inicializar_vectorstore()
 
         # === Inicialización de BD + semillas + limpieza TTL ===
-        logger.info("🗄️ Inicializando base de datos SQLite...")
-        await init_db()
-        await seed_pois_if_needed()
-        await prune_expired()
-
-
+        logger.info(f"🗄️ Inicializando almacenamiento (LOCAL={os.getenv('LOCAL','true')})...")
+        await store.init()
+        await store.seed_pois(pois=[])
+        await store.prune_expired() # limpia ubicaciones expiradas
+        
         logger.info("✅ Ratoncito Pérez API iniciado correctamente")
 
     except Exception as e:
         logger.error(f"❌ Error durante el startup: {e}")
         raise
 
+# Endpoint raíz con info básica
 @app.get("/", response_model=Dict[str, str])
 async def root():
     """Endpoint raíz con información de la API"""
@@ -234,6 +242,7 @@ async def health_check():
         }
     }
 
+# Endpoint CrewAI guide turístico
 @app.post("/guide", response_model=TourismResponse)
 async def generate_tourism_guide(query: TourismQuery):
     """
@@ -332,6 +341,7 @@ def vectorstore_status():
     ready = getattr(app.state, "vectorstore_ready", (exists and not stale))
     return {"dir": d, "exists": exists, "ttl_days": ttl, "age_seconds": age, "stale": stale, "ready": ready}
 
+# === ENDPOINTS PRINCIPALES: Ubicación + Recomendaciones ===
 @app.post("/users/location")
 async def users_location(loc: LocationIn):
     """Guardar ubicación con TTL (por defecto 3 días; o usa DB_TTL_DAYS si la pones en .env)"""
@@ -368,46 +378,76 @@ async def recommendations(loc: LocationIn, session: AsyncSession = Depends(get_s
 # === ENDPOINTS DEDEBUG/INSPECCIÓN DE BD (SQLite) ===
 # Solo para desarrollo; en producción deshabilitar o proteger
 
-
 @app.get("/debug/db/summary")
-async def db_summary(session: SQLModelAsyncSession = Depends(get_session)):
-    try:
-        from models.entities import POI, User, UserLocation
-        poi = (await session.exec(select(POI))).all()
-        usr = (await session.exec(select(User))).all()
-        loc = (await session.exec(select(UserLocation))).all()
-        return {"poi": len(poi), "users": len(usr), "user_locations": len(loc)}
-    except Exception as e:
-        logger.exception("db_summary failed")
-        raise HTTPException(status_code=500, detail=str(e))
-    
+async def db_summary():
+    return await store.summary()
 
 @app.get("/debug/db/pois")
-async def db_pois(session: SQLModelAsyncSession = Depends(get_session)):
-    try:
-        from models.entities import POI
-        rows = (await session.exec(select(POI))).all()
-        return [{"id":r.id, "name":r.name, "lat":r.latitude, "lon":r.longitude} for r in rows]
-    except Exception as e:
-        logger.exception("db_pois failed")
-        raise HTTPException(status_code=500, detail=str(e))
+async def db_pois():
+    """Lista POIs de forma agnóstica usando top_pois con radio grande en Sol."""
+    # Centro Madrid (Puerta del Sol) y radio grande para traer todos los seed
+    out = await store.top_pois(lat=40.4169, lon=-3.7035, radius_m=50000, pmr=False, age_range=None, k=200)
+    # Normaliza salida a id/name/lat/lon si está disponible
+    # (top_pois devuelve id, name, distance_m, accessible, short)
+    return out
+
+from typing import List
 
 @app.get("/debug/db/user/{user_id}/locations")
-async def db_user_locations(user_id: str, session: SQLModelAsyncSession = Depends(get_session)):
-    try:
+async def db_user_locations(user_id: str):
+    import os
+    is_local = (os.getenv("LOCAL", "true").lower() in ("1","true","yes","on"))
+
+    if is_local:
+        # --- SQLite (SQLModel) ---
+        from sqlmodel import select
+        from models.database import AsyncSessionLocal
         from models.entities import UserLocation
-        rows = (await session.exec(
-            select(UserLocation).where(UserLocation.user_id == user_id).order_by(UserLocation.created_at.desc())
-        )).all()
+        async with AsyncSessionLocal() as s:
+            rows = (await s.exec(
+                select(UserLocation)
+                .where(UserLocation.user_id == user_id)
+                .order_by(UserLocation.created_at.desc())
+            )).all()
         return [
-            {"id":r.id, "lat":r.latitude, "lon":r.longitude,
-             "created_at":r.created_at.isoformat(), "expires_at":r.expires_at.isoformat()}
+            {
+                "id": r.id,
+                "lat": r.latitude,
+                "lon": r.longitude,
+                "created_at": r.created_at.isoformat(),
+                "expires_at": r.expires_at.isoformat(),
+            }
             for r in rows
         ]
-    except Exception as e:
-        logger.exception("db_user_locations failed")
-        raise HTTPException(status_code=500, detail=str(e))
-    
+    else:
+        # --- Mongo Atlas (Motor) ---
+        from motor.motor_asyncio import AsyncIOMotorClient
+        MONGODB_URI = os.getenv("MONGODB_URI")
+        MONGO_DB = os.getenv("MONGO_DB", "perez")
+        if not MONGODB_URI:
+            return {"error": "MONGODB_URI no definido"}
+
+        # Reutiliza un cliente global sencillo para debug
+        if not hasattr(app.state, "mongo_dbg_client"):
+            app.state.mongo_dbg_client = AsyncIOMotorClient(MONGODB_URI)
+        db = app.state.mongo_dbg_client[MONGO_DB]
+
+        docs = await db.user_locations.find(
+            {"user_id": user_id}
+        ).sort("created_at", -1).to_list(200)
+
+        return [
+            {
+                "id": str(d.get("_id")),
+                "lat": d.get("latitude"),
+                "lon": d.get("longitude"),
+                "created_at": d.get("created_at").isoformat() if d.get("created_at") else None,
+                "expires_at": d.get("expires_at").isoformat() if d.get("expires_at") else None,
+            }
+            for d in docs
+        ]
+
+
 # =====================   
 # ===== FIN DEBUG =====
 

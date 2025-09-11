@@ -40,3 +40,6 @@ sqlmodel
 sqlalchemy>=2.0
 aiosqlite
 
+#  MongoDB (si se usa MongoDB en lugar de SQLite)
+motor>=3.5.1
+

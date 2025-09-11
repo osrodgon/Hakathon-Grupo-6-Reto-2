@@ -67,3 +67,5 @@ backend/vectorstore_cache/*
 # Storage local (solo carpeta, no datos)
 backend/storage/*
 !backend/storage/.gitkeep
+*.faiss
+*.pkl
