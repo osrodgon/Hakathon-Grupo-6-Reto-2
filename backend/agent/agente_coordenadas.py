@@ -436,7 +436,8 @@ def get_weather_forecast(latitude: float, longitude: float, forecast_days: int =
         list: Una lista de diccionarios con el pronóstico del tiempo.
     """
     
-    data = get_weather_forecast_json(latitude, longitude, forecast_days).json()
+    response = get_weather_forecast_json(latitude, longitude, forecast_days)
+    data = response.json()    
 
     if data:
         # Extraer los datos relevantes
