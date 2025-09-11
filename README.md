@@ -5,6 +5,7 @@ Este repositorio contiene la solución al Reto 2 del Hakathon "Factoría F5 - Al
 ## Estructura del proyecto
 
 ```
+backend/juanc
 frontend/        # Código fuente del frontend
 model/           # Archivos relacionados con modelos (actualmente vacío)
 .gitignore       # Configuración de archivos ignorados por Git
@@ -37,10 +38,10 @@ model/           # Archivos relacionados con modelos (actualmente vacío)
 Grupo 6:
 
 - Stephanie Ángeles — [stephyangeles](https://github.com/stephyangeles)
-- Oscar Rodríguez — [osrodgon](https://github.com/osrodgon)
-- Monserrat González — [monigogo](https://github.com/monigogo)
-- Maribel García — [MaribelGR-dev](https://github.com/MaribelGR-dev)
-- Guillermo Halfon — [GHalfbbt](https://github.com/GHalfbbt)
+- Oscar Rodriguez — [osrodgon](https://github.com/osrodgon)
+- Monica G — [monigogo](https://github.com/monigogo)
+- Maribel Gutiérrez Ramírez — [MaribelGR-dev](https://github.com/MaribelGR-dev)
+- Alfonso Bermúdez — [GHalfbbt](https://github.com/GHalfbbt)
 - Juan Carlos Macías — [juancmacias](https://github.com/juancmacias)
 
 
