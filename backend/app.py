@@ -341,79 +341,49 @@ def vectorstore_status():
     ready = getattr(app.state, "vectorstore_ready", (exists and not stale))
     return {"dir": d, "exists": exists, "ttl_days": ttl, "age_seconds": age, "stale": stale, "ready": ready}
 
-
-@app.get("/debug/db/summary")
-async def db_summary():
-    return await store.summary()
-
-@app.get("/debug/db/pois")
-async def db_pois():
-    """Lista POIs de forma agnóstica usando top_pois con radio grande en Sol."""
-    # Centro Madrid (Puerta del Sol) y radio grande para traer todos los seed
-    out = await store.top_pois(lat=40.4169, lon=-3.7035, radius_m=50000, pmr=False, age_range=None, k=200)
-    # Normaliza salida a id/name/lat/lon si está disponible
-    # (top_pois devuelve id, name, distance_m, accessible, short)
-    return out
-
-from typing import List
-
-@app.get("/debug/db/user/{user_id}/locations")
-async def db_user_locations(user_id: str):
+# === ENDPOINTS PRINCIPALES: Ubicación + Recomendaciones ===
+@app.post("/users/location")
+async def users_location(loc: LocationIn):
+    """Guardar ubicación con TTL (por defecto 3 días; o usa DB_TTL_DAYS si la pones en .env)"""
     import os
-    is_local = (os.getenv("LOCAL", "true").lower() in ("1","true","yes","on"))
+    ttl = int(os.getenv("DB_TTL_DAYS", "3"))
+    if ttl <= 0:
+        ttl = 3
+    await save_location(
+        user_id=loc.user_id,
+        lat=loc.latitude,
+        lon=loc.longitude,
+        ttl_days=ttl,
+        profile_type=loc.profile_type,
+        has_mobility_issues=loc.pmr,
+        age_range=loc.age_range,
+    )
+    return {"ok": True}
 
-    if is_local:
-        # --- SQLite (SQLModel) ---
-        from sqlmodel import select
-        from models.database import AsyncSessionLocal
-        from models.entities import UserLocation
-        async with AsyncSessionLocal() as s:
-            rows = (await s.exec(
-                select(UserLocation)
-                .where(UserLocation.user_id == user_id)
-                .order_by(UserLocation.created_at.desc())
-            )).all()
-        return [
-            {
-                "id": r.id,
-                "lat": r.latitude,
-                "lon": r.longitude,
-                "created_at": r.created_at.isoformat(),
-                "expires_at": r.expires_at.isoformat(),
-            }
-            for r in rows
-        ]
-    else:
-        # --- Mongo Atlas (Motor) ---
-        from motor.motor_asyncio import AsyncIOMotorClient
-        MONGODB_URI = os.getenv("MONGODB_URI")
-        MONGO_DB = os.getenv("MONGO_DB", "perez")
-        if not MONGODB_URI:
-            return {"error": "MONGODB_URI no definido"}
+@app.get("/recommendations")
+async def get_recommendations(
+    user_id: str = Query(..., description="ID del usuario"),
+    latitude: float = Query(..., description="Latitud actual"),
+    longitude: float = Query(..., description="Longitud actual"),
+    radius_m: int = Query(1000, ge=10, le=50000, description="Radio en metros"),
+    pmr: bool = Query(False, description="Movilidad reducida"),
+    age_range: str | None = Query(None, description="Rango de edad (p.ej. '7-9')"),
+    k: int = Query(3, ge=1, le=10, description="Número de sugerencias"),
+):
+    """
+    Devuelve los k POIs más cercanos (con scoring por distancia/PMR/edad).
+    GET con parámetros en la query: ?user_id=...&latitude=...&longitude=...&pmr=true...
+    """
+    items = await store.top_pois(
+        lat=latitude,
+        lon=longitude,
+        radius_m=radius_m,
+        pmr=pmr,
+        age_range=age_range,
+        k=k,
+    )
+    return {"items": items, "meta": {"user_id": user_id, "radius_m": radius_m, "k": k}}
 
-        # Reutiliza un cliente global sencillo para debug
-        if not hasattr(app.state, "mongo_dbg_client"):
-            app.state.mongo_dbg_client = AsyncIOMotorClient(MONGODB_URI)
-        db = app.state.mongo_dbg_client[MONGO_DB]
-
-        docs = await db.user_locations.find(
-            {"user_id": user_id}
-        ).sort("created_at", -1).to_list(200)
-
-        return [
-            {
-                "id": str(d.get("_id")),
-                "lat": d.get("latitude"),
-                "lon": d.get("longitude"),
-                "created_at": d.get("created_at").isoformat() if d.get("created_at") else None,
-                "expires_at": d.get("expires_at").isoformat() if d.get("expires_at") else None,
-            }
-            for d in docs
-        ]
-
-
-# =====================   
-# ===== FIN DEBUG =====
 
 
 # Función para ejecutar el servidor
