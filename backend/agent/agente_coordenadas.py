@@ -4,6 +4,7 @@ Agente CrewAI Simplificado - Solo 2 Agentes especializados
 Versión optimizada para Madrid con Ratón Pérez
 """
 
+from email.policy import default
 import os
 import sys
 import requests
@@ -29,6 +30,35 @@ from crewai import Agent, Task, Crew, Process
 from crewai.tools import BaseTool
 from typing import Type
 from pydantic import BaseModel, Field
+
+# Mapa para traducir los códigos de la WMO a descripciones en español
+WEATHER_CODES = {
+    0: "Cielo despejado",
+    1: "Principalmente despejado",
+    2: "Parcialmente nublado",
+    3: "Nublado",
+    45: "Niebla",
+    48: "Niebla con hielo",
+    51: "Llovizna ligera",
+    53: "Llovizna moderada",
+    55: "Llovizna densa",
+    61: "Lluvia ligera",
+    63: "Lluvia moderada",
+    65: "Lluvia fuerte",
+    66: "Lluvia helada ligera",
+    67: "Lluvia helada fuerte",
+    71: "Nieve ligera",
+    73: "Nieve moderada",
+    75: "Nieve fuerte",
+    80: "Chubascos ligeros",
+    81: "Chubascos moderados",
+    82: "Chubascos violentos",
+    85: "Chubascos de nieve ligeros",
+    86: "Chubascos de nieve fuertes",
+    95: "Tormenta eléctrica",
+    96: "Tormenta eléctrica con granizo ligero",
+    99: "Tormenta eléctrica con granizo fuerte"
+}
 
 # Definir herramientas especializadas
 class MadridPDFSearchInput(BaseModel):
@@ -70,6 +100,20 @@ class LocationSearchTool(BaseTool):
     def _run(self, lat: float, lon: float, radius_km: float = 1.0, category: str = "turismo") -> str:
         radius_meters = int(radius_km * 1000)
         return buscar_lugares_openstreetmap(lat, lon, radius_meters, category)
+    
+class WeatherSearchInput(BaseModel):
+    """Input para la obtención de la previsión del tiempo"""
+    latitude: float = Field(description="Latitud")
+    longitude: float = Field(description="Longitud")
+    forecast_days: int = Field(default=3, description="Número de días")
+    
+class WeatherSearchTool(BaseModel):
+    name: str = "weather_search"
+    description: str = "Obtiene la previsión del tiempo usando coordenadas GPS y Open-Meteo"
+    args_schema: Type[BaseModel] =WeatherSearchInput
+    
+    def _run(self, latitude: float, longitude: float, forecast_days: int):
+        return get_weather_forecast(latitude, longitude, forecast_days)
 
 def crear_llm_gemini():
     """Configura el LLM Gemini para CrewAI usando litellm"""
@@ -357,6 +401,69 @@ def buscar_lugares_openstreetmap(lat, lon, radius_meters=1000, category="tourism
             
     except Exception as e:
         return f"❌ Error buscando lugares: {e}"
+    
+def get_weather_forecast_json(latitude: float, longitude: float, forecast_days: int = 3):
+    """
+    Obtiene la previsión del tiempo para los próximos días.
+
+    Args:
+        latitude (float): La latitud de la ubicación.
+        longitude (float): La longitud de la ubicación.
+        forecast_days (int): El número de días para la previsión.
+
+    Returns:
+        list: Una lista de diccionarios con el pronóstico del tiempo.
+    """
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=Europe%2FMadrid&forecast_days={forecast_days}"
+    
+    try:
+        response = requests.get(url)
+                
+        return response
+    except requests.exceptions.RequestException as e:
+        return None
+    
+def get_weather_forecast(latitude: float, longitude: float, forecast_days: int = 3):
+    """
+    Obtiene la previsión del tiempo para los próximos días.
+
+    Args:
+        latitude (float): La latitud de la ubicación.
+        longitude (float): La longitud de la ubicación.
+        forecast_days (int): El número de días para la previsión.
+
+    Returns:
+        list: Una lista de diccionarios con el pronóstico del tiempo.
+    """
+    
+    response = get_weather_forecast_json(latitude, longitude, forecast_days)
+    data = response.json()    
+
+    if data:
+        # Extraer los datos relevantes
+        daily_data = data.get("daily", {})
+        forecast = []
+
+        if daily_data:
+            for i in range(len(daily_data["time"])):
+                weather_code = daily_data["weather_code"][i]
+
+                # Convertir la cadena de fecha a un objeto datetime
+                date_obj = datetime.strptime(daily_data['time'][i], "%Y-%m-%d")
+                # Formatear la fecha en español
+                formatted_date = date_obj.strftime("%A %d de %B")
+
+                info = f"📈 **Fecha: {formatted_date.capitalize()}**n\n"
+                info += f"    \n"
+                info += f"    Máx. Temp: {daily_data['temperature_2m_max'][i]} °C\n"
+                info += f"    Mín. Temp: {daily_data['temperature_2m_min'][i]} °C\n"
+                info += f"    Condición: {WEATHER_CODES.get(weather_code, 'Condición desconocida')}\n"
+
+                forecast.append(info)
+                
+        return forecast if forecast else "No se ha encontrado la previsión del tiempo."
+    else:
+        return f"❌ Error en consulta a Open-Meteo: {response.status_code}"
 
 def main(user_query, llm, vectorstore, lat=None, lon=None, radio_km=1.0, 
          categoria_foursquare="turismo", infantil=False, adulto=False, accesibilidad=False):
@@ -381,6 +488,7 @@ def main(user_query, llm, vectorstore, lat=None, lon=None, radio_km=1.0,
 
     internet_search_tool = InternetSearchTool()
     location_search_tool = LocationSearchTool()
+    weather_search_tool = WeatherSearchTool()
 
     # AGENTE 1: Investigador Cultural de Madrid (Historia + Información actual)
     madrid_researcher = Agent(
@@ -530,6 +638,20 @@ def openstreetmap(lat=40.4170, lon=-3.7036, radius_km=1.0, category="turismo"):
         return resultado
     except Exception as e:
         print(f"❌ Error en OpenStreetMap: {e}")
+        return f"Error: {e}"
+    
+def weather_forecast(latitude: float, longitude: float, forecast_days: int = 3):
+    try:
+        forecast_data = get_weather_forecast(latitude, longitude, forecast_days)
+
+        print(f"\📈 Open-Meteo")
+        print(f"📍 Coordenadas: {latitude}, {longitude}")
+        print("="*50)
+        print(forecast_data)
+        
+        return forecast_data
+    except Exception as e:
+        print(f"❌ Error en Open Meteo: {e}")
         return f"Error: {e}"
 
 if __name__ == "__main__":

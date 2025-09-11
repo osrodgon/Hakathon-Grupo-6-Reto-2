@@ -99,6 +99,8 @@ def _build_vectorstore_sync(logger):
 
 
 
+from backend.agent.agente_coordenadas import WEATHER_CODES, get_weather_forecast_json
+
 # Agregar el directorio agent al path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'agent'))
 
@@ -181,6 +183,12 @@ class ChatOut(BaseModel):
     response: str
     model: str | None = None
     created_at: str
+
+    
+class ForecastResponse(BaseModel):
+    forecast: str
+    max: float
+    min: floa
 
 
 # Variables globales para el estado del agente
@@ -365,7 +373,20 @@ async def agent_turn(turn_id: str):
     if not item:
         raise HTTPException(status_code=404, detail="chat turn not found")
     return item
-
+@app.get("/forecast")
+async def get_forecast(lat: float, lon: float):
+    response = get_weather_forecast_json(lat, lon, 1)
+    
+    if response.status_code == 200:
+        data = response.json().get("daily", {})
+                
+        forecast = WEATHER_CODES.get(data["weather_code"][0], 'Condición desconocida')
+        max = data['temperature_2m_max'][0]
+        min = data['temperature_2m_min'][0]
+        
+        
+        return ForecastResponse(forecast=forecast, max=max, min=min)
+    return response
 
 @app.get("/locations")
 async def get_sample_locations():
