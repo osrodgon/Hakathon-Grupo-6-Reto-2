@@ -25,16 +25,8 @@ import threading
 import queue
 import numpy as np
 import cv2
-from ultralytics import YOLO
-import torch
-
-# ConfiguraciÃ³n del modelo YOLO
-YOLO_MODEL_NAME = "yolov8n.pt"  # Modelo YOLOv8 nano preentrenado
-
-# Solo detecta Ratoncito PÃ©rez si se entrena un modelo personalizado
-# Por ahora usaremos detección de personas (clase 0 en COCO)
-TARGET_CLASS_ID = 0  # Persona en COCO dataset
-TARGET_CLASS_NAME = "person"
+import onnxruntime as ort
+from huggingface_hub import hf_hub_download
 
 from agent.agente_coordenadas import WEATHER_CODES, get_weather_forecast_json
 
@@ -108,13 +100,17 @@ class VisionStreamResponse(BaseModel):
 llm = None
 vectorstore = None
 
-# ConfiguraciÃ³n del modelo YOLO
-YOLO_MODEL_NAME = "yolov8n.pt"  # Modelo YOLOv8 nano preentrenado
+# ConfiguraciÃ³n de Hugging Face para tu modelo personalizado
+HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
+HF_TOKEN = os.getenv('HF_TOKEN')  # Token para descargar modelos
 
-# Solo detecta Ratoncito PÃ©rez si se entrena un modelo personalizado
-# Por ahora usaremos detección de personas (clase 0 en COCO)
-TARGET_CLASS_ID = 0  # Persona en COCO dataset
-TARGET_CLASS_NAME = "person"
+# ConfiguraciÃ³n del modelo YOLO personalizado
+YOLO_REPO_ID = "juancmamacias/hakathon_f5_mil"
+YOLO_FILENAME = "best.onnx"
+
+# Solo detecta Ratoncito PÃ©rez (clase 0)
+RATONCITO_CLASS_ID = 0
+RATONCITO_CLASS_NAME = "ratoncito_perez"
 
 # GestiÃ³n de conexiones WebSocket activas
 active_connections: List[WebSocket] = []
@@ -123,94 +119,6 @@ is_processing = False
 
 # Variable global para el modelo YOLO
 yolo_model = None
-
-def preprocess_frame_for_yolo(frame, input_size=(416, 416)):
-    """
-    Esta función ya no es necesaria con Ultralytics YOLO
-    YOLOv8 maneja el preprocesamiento automáticamente
-    """
-    # YOLOv8 maneja automáticamente el preprocesamiento
-    return frame, 1.0, (0, 0)
-
-def postprocess_yolo_output(results, frame_shape, scale=1.0, offset=(0,0), conf_threshold=0.5):
-    """
-    Convertir resultados de YOLOv8 a formato de detecciones
-    """
-    try:
-        detections = []
-        
-        if results and len(results) > 0:
-            result = results[0]  # Primer resultado
-            
-            # Obtener boxes, confianzas y clases
-            if hasattr(result, 'boxes') and result.boxes is not None:
-                boxes = result.boxes
-                
-                for i in range(len(boxes)):
-                    # Obtener datos del box
-                    xyxy = boxes.xyxy[i].cpu().numpy()  # Coordenadas x1,y1,x2,y2
-                    conf = float(boxes.conf[i].cpu().numpy())  # Confianza
-                    cls = int(boxes.cls[i].cpu().numpy())  # Clase
-                    
-                    # Filtrar por confianza y clase objetivo
-                    if conf > conf_threshold and cls == TARGET_CLASS_ID:
-                        x1, y1, x2, y2 = xyxy
-                        
-                        print(f"✅ DETECCIÓN VÁLIDA: {TARGET_CLASS_NAME} con {conf:.3f} de confianza")
-                        print(f"  📍 BBox: ({int(x1)},{int(y1)}) -> ({int(x2)},{int(y2)}) | Tamaño: {int(x2-x1)}x{int(y2-y1)}px")
-                        
-                        detections.append({
-                            'bbox': (int(x1), int(y1), int(x2), int(y2)),
-                            'confidence': float(conf),
-                            'class_id': cls,
-                            'class_name': TARGET_CLASS_NAME
-                        })
-                    elif conf > 0.1:  # Mostrar todas las detecciones con confianza > 0.1
-                        class_name = TARGET_CLASS_NAME if cls == TARGET_CLASS_ID else f"clase_{cls}"
-                        print(f"  📦 Detección {i+1}: {class_name} | Confianza: {conf:.3f} | Clase ID: {cls}")
-        
-        if len(detections) == 0:
-            print(f"⚠️  No se encontraron detecciones válidas para {TARGET_CLASS_NAME}")
-        
-        return detections
-        
-    except Exception as e:
-        print(f"❌ Error en postprocessing: {e}")
-        return []
-
-def draw_bounding_boxes(frame, detections):
-    """
-    Dibujar bounding boxes verdes en el frame
-    """
-    try:
-        for detection in detections:
-            x1, y1, x2, y2 = detection['bbox']
-            confidence = detection['confidence']
-            class_name = detection['class_name']
-            
-            # Dibujar rectángulo verde
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            
-            # Preparar texto
-            label = f"{class_name}: {confidence:.2f}"
-            
-            # Calcular tamaño del texto
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.6
-            thickness = 1
-            (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
-            
-            # Dibujar fondo para el texto
-            cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width, y1), (0, 255, 0), -1)
-            
-            # Dibujar texto en negro
-            cv2.putText(frame, label, (x1, y1 - 5), font, font_scale, (0, 0, 0), thickness)
-        
-        return frame
-        
-    except Exception as e:
-        print(f"❌ Error dibujando bounding boxes: {e}")
-        return frame
 
 @app.on_event("startup")
 async def startup_event():
@@ -296,13 +204,7 @@ def load_yolo_model():
         # Almacenar el tamaÃ±o de entrada como atributo del modelo
         session.input_size = (input_width, input_height)
         
-        # Crear wrapper que simula API de YOLOv8
-        print(f"🎯 Creando wrapper con API estilo YOLOv8...")
-        yolo_wrapper = YOLOWrapper(session, (input_width, input_height))
-        print(f"✅ Wrapper YOLOv8 creado exitosamente!")
-        print(f"   📋 Disponible: model.predict(source, conf=0.5, show=False, save=False)")
-        
-        return yolo_wrapper
+        return session
         
     except Exception as e:
         print(f"âŒ ERROR CARGANDO MODELO: {e}")
@@ -536,99 +438,6 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
         reload=reload,
         log_level="info"
     )
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """
-    WebSocket para recibir frames de video desde la cámara del frontend
-    ¡Ahora con sintaxis model.predict() estilo YOLOv8!
-    """
-    await websocket.accept()
-    session_start = datetime.now()
-    print(f"🔌 WEBSOCKET CONECTADO - Análisis con model.predict()")
-    
-    frame_count = 0
-    
-    try:
-        while True:
-            # Recibir frame como string base64
-            frame_data = await websocket.receive_text()
-            frame_count += 1
-            
-            if frame_data.startswith("data:image/jpeg;base64,"):
-                # Quitar el prefijo de data URL
-                header, encoded = frame_data.split(",", 1)
-                img_bytes = base64.b64decode(encoded)
-                
-                # Convertir a imagen OpenCV
-                np_arr = np.frombuffer(img_bytes, np.uint8)
-                frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-                
-                if frame is not None:
-                    # Análisis básico
-                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    height, width = frame.shape[:2]
-                    brightness = np.mean(gray)
-                    
-                    # 🎯 AQUÍ ESTÁ LA SINTAXIS model.predict() QUE QUERÍAS VER!
-                    if frame_count % 30 == 0 and yolo_model is not None:
-                        try:
-                            print(f"🚀 ===== USANDO model.predict() =====")
-                            
-                            # ¡Esta es la sintaxis que querías ver!
-                            results = yolo_model.predict(
-                                source=frame,        # Frame de la cámara
-                                conf=0.5,           # Confianza mínima
-                                show=False,         # No mostrar ventana
-                                save=False          # No guardar automáticamente
-                            )
-                            
-                            print(f"🎯 model.predict() ejecutado exitosamente!")
-                            print(f"📊 Resultados: {len(results)} objetos analizados")
-                            
-                            # Procesar resultados
-                            if results and len(results) > 0:
-                                result = results[0]  # Primer resultado
-                                
-                                if hasattr(result, 'detections') and result.detections:
-                                    # Hay detecciones válidas
-                                    print(f"🎯 ¡¡¡RATONCITO PÉREZ DETECTADO con model.predict()!!!")
-                                    print(f"📦 {len(result.detections)} detección(es) encontrada(s)")
-                                    
-                                    # Dibujar bounding boxes usando método plot() simulado
-                                    frame_with_boxes = result.plot()
-                                    cv2.imwrite("detection_frame_predict.jpg", frame_with_boxes)
-                                    
-                                    for i, det in enumerate(result.detections):
-                                        conf = det['confidence']
-                                        bbox = det['bbox']
-                                        print(f"  🏆 Detección #{i+1}: Confianza {conf:.3f}, BBox {bbox}")
-                                    
-                                    print(f"💾 Frame guardado como 'detection_frame_predict.jpg'")
-                                else:
-                                    print(f"❌ model.predict() no detectó Ratoncito Pérez en frame #{frame_count}")
-                                    cv2.imwrite("last_frame.jpg", frame)
-                            else:
-                                print(f"⚠️ model.predict() no retornó resultados válidos")
-                                cv2.imwrite("last_frame.jpg", frame)
-                                
-                        except Exception as e:
-                            print(f"❌ ERROR EN model.predict(): {e}")
-                            cv2.imwrite("last_frame.jpg", frame)
-                    
-                    print(f"📸 Frame #{frame_count}: {width}x{height}, Brillo: {brightness:.1f}")
-                    
-                    # Log cada 10 frames
-                    if frame_count % 10 == 0:
-                        session_duration = (datetime.now() - session_start).total_seconds()
-                        fps_avg = frame_count / session_duration if session_duration > 0 else 0
-                        print(f"🎯 {frame_count} frames | {fps_avg:.1f} FPS | {session_duration:.1f}s")
-                        
-    except WebSocketDisconnect:
-        session_duration = (datetime.now() - session_start).total_seconds()
-        print(f"🔌 Cliente desconectado después de {frame_count} frames en {session_duration:.1f}s")
-    except Exception as e:
-        print(f"❌ ERROR WebSocket: {e}")
 
 if __name__ == "__main__":
     # Configuración para desarrollo
