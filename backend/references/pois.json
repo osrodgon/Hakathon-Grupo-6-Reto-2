@@ -1,0 +1,23 @@
+import json
+from pathlib import Path
+from sqlmodel import select
+from models.entities import POI
+from models.database import AsyncSessionLocal
+
+REF = Path(__file__).resolve().parents[2] / "references" / "pois.json"
+
+async def seed_pois_if_needed():
+    async with AsyncSessionLocal() as s:
+        count = (await s.exec(select(POI))).all()
+        if count:
+            return
+        if REF.exists():
+            data = json.loads(REF.read_text(encoding="utf-8"))
+            for p in data:
+                s.add(POI(
+                    id=p["id"], name=p["name"], latitude=p["lat"], longitude=p["lon"],
+                    kids_friendly=p.get("kids_friendly", True),
+                    accessible=p.get("accessible", True),
+                    short=p.get("short"), source=p.get("source")
+                ))
+            await s.commit()
