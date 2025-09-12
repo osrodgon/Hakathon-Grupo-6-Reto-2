@@ -218,7 +218,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Detectar si los datos son una imagen directa o JSON
                 if data.strip().startswith('data:image/'):
                     # Cliente envía imagen directamente, crear JSON wrapper
-                    logger.info("📸 Recibida imagen directa, convirtiendo a formato JSON...")
+                    #logger.info("📸 Recibida imagen directa, convirtiendo a formato JSON...")
                     frame_data = {
                         "type": "frame",
                         "data": data.strip()
@@ -286,26 +286,26 @@ async def websocket_endpoint(websocket: WebSocket):
                     
                     # Decodificar imagen con mejor manejo de formatos
                     image_data_str = frame_data["data"]
-                    logger.info(f"📄 Procesando imagen: {len(image_data_str)} caracteres")
+                    #logger.info(f"📄 Procesando imagen: {len(image_data_str)} caracteres")
                     
                     try:
                         # Remover prefijo data:image si existe
                         if "," in image_data_str and image_data_str.startswith('data:image/'):
                             # Formato: data:image/jpeg;base64,XXXX
                             base64_data = image_data_str.split(",")[1]
-                            logger.info("🔧 Removido prefijo data:image/")
+                            #logger.info("🔧 Removido prefijo data:image/")
                         else:
                             # Asumir que es base64 puro
                             base64_data = image_data_str
                         
                         # Decodificar base64
                         image_data = base64.b64decode(base64_data)
-                        logger.info(f"✅ Base64 decodificado: {len(image_data)} bytes")
+                        #logger.info(f"✅ Base64 decodificado: {len(image_data)} bytes")
                         
                         # Convertir a imagen
                         image = Image.open(BytesIO(image_data)).convert("RGB")
                         frame = np.array(image)
-                        logger.info(f"✅ Imagen procesada: {frame.shape}")
+                        #logger.info(f"✅ Imagen procesada: {frame.shape}")
                         
                     except Exception as img_error:
                         logger.error(f"❌ Error específico procesando imagen: {img_error}")
@@ -341,7 +341,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # Estadísticas del frame
             brightness = np.mean(frame)
             h, w = frame.shape[:2]
-            logger.info(f"📸 Frame #{frame_count}: {w}x{h}, Brillo: {brightness:.1f}")
+            #logger.info(f"📸 Frame #{frame_count}: {w}x{h}, Brillo: {brightness:.1f}")
             
             # YOLOv8 - Predicción cada 30 frames
             detections = []
@@ -360,12 +360,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     verbose=False
                 )
                 
-                logger.info(f"   📋 Parámetros: conf={CONF_THRESHOLD}, show=False, save=False")
+                #logger.info(f"   📋 Parámetros: conf={CONF_THRESHOLD}, show=False, save=False")
                 
                 # Procesar resultados
                 detections = postprocess_results(results, CONF_THRESHOLD)
                 
-                logger.info("🎯 model.predict() ejecutado exitosamente!")
+                #logger.info("🎯 model.predict() ejecutado exitosamente!")
                 logger.info(f"📊 Resultados: {len(detections)} Ratoncitos Pérez detectados")
                 
                 # Dibujar bounding boxes en la imagen si hay detecciones
@@ -391,8 +391,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Texto
                         cv2.putText(annotated_frame, label, (x1, y1-5), 
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
-                else:
-                    logger.info(f"❌ model.predict() no detectó Ratoncito Pérez en frame #{frame_count}")
+                #else:
+                    #logger.info(f"❌ model.predict() no detectó Ratoncito Pérez en frame #{frame_count}")
                 
                 # Convertir imagen anotada a base64 para enviar al frontend
                 annotated_image = Image.fromarray(annotated_frame)
@@ -560,7 +560,7 @@ async def health():
 # ============== INICIAR SERVIDOR ==============
 if __name__ == "__main__":
     uvicorn.run(
-        "app_ultralytics:app",
+        "app:app",
         host="127.0.0.1",
         port=8000,
         reload=True,
