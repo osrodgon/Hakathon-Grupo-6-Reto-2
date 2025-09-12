@@ -4,6 +4,7 @@ import Button from '../components/common/Button';
 import Card, { CardContent } from '../components/common/Card';
 import { COLORS } from '../config/constants';
 import { formatTime } from '../utils/dateUtils';
+import app5 from '../images/app5.png';
 
 
 /**
@@ -26,9 +27,8 @@ const ChatPage = ({
 
   /**
    * Función mock para simular respuestas del backend durante desarrollo
-   */
-  const mockBackendResponse = async (query) => {
-    const response = `¡Hola! Recibí tu mensaje: "${query}". Soy el Ratoncito Pérez 🐭✨`;
+   */  const mockBackendResponse = async (query) => {
+    const response = `¡Hola! Recibí tu mensaje: "${query}". Soy el Rey Niño Buby 👑✨`;
     await new Promise(resolve => setTimeout(resolve, 500));
     return response;
   };
@@ -160,11 +160,9 @@ const ChatPage = ({
 
       if (!response) {
         throw new Error('Respuesta vacía del backend');
-      }
-
-      // 4. Agregar respuesta del backend
+      }      // 4. Agregar respuesta del backend
       const botMsg = {
-        type: 'ratoncito',
+        type: 'rey',
         content: response,
         timestamp: new Date(),
         id: `bot_${Date.now()}`
@@ -288,24 +286,26 @@ const ChatPage = ({
           borderColor: COLORS.GRAY_LIGHT 
         }}
       >
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center gap-3">
+        <div className="max-w-2xl mx-auto">          <div className="flex items-center gap-3">
             <div 
-              className="w-12 h-12 rounded-full flex items-center justify-center"
+              className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden"
               style={{ backgroundColor: COLORS.PRIMARY_YELLOW }}
             >
-              <Crown 
-                className="w-6 h-6"
-                style={{ color: COLORS.PRIMARY_BROWN }} 
+              <img 
+                src={app5} 
+                alt="Rey Niño Buby" 
+                className="w-30 h-30 object-contain"
               />
             </div>
             <div className="flex-1">
-              <h2 
-                className="font-title font-bold text-lg"
-                style={{ color: COLORS.PRIMARY_BROWN }}
-              >
-                {userProfile.language === 'en' ? 'Tooth Mouse' : 'Ratoncito Pérez'}
-              </h2>
+              <div className="flex items-center gap-2">                <h2 
+                  className="font-title font-bold text-lg"
+                  style={{ color: COLORS.PRIMARY_BROWN }}
+                >
+                  {userProfile.language === 'en' ? 'King Boy Buby' : 'Rey Niño Buby'}
+                </h2>
+                <div className={`w-3 h-3 rounded-full ${USE_MOCK_BACKEND ? 'bg-yellow-500' : 'bg-green-500'}`} />
+              </div>
               <p 
                 className="text-sm font-body opacity-75"
                 style={{ color: COLORS.BLACK }}
@@ -317,8 +317,7 @@ const ChatPage = ({
               </p>
             </div>
             <div className="flex flex-col items-end">
-              <div className={`w-3 h-3 rounded-full ${USE_MOCK_BACKEND ? 'bg-yellow-500' : 'bg-green-500'}`} />
-              <span className="text-xs mt-1" style={{ color: COLORS.PRIMARY_BROWN }}>
+              <span className="text-xs" style={{ color: COLORS.PRIMARY_BROWN }}>
                 {USE_MOCK_BACKEND ? 'Demo' : 'Live'}
               </span>
             </div>
@@ -337,14 +336,13 @@ const ChatPage = ({
                 <Crown 
                   className="w-12 h-12 mx-auto mb-3"
                   style={{ color: COLORS.PRIMARY_BROWN }} 
-                />
-                <h3 
+                />                <h3 
                   className="font-title font-bold text-lg mb-2"
                   style={{ color: COLORS.PRIMARY_BROWN }}
                 >
                   {userProfile.language === 'en' 
-                    ? 'Hello! I\'m the Tooth Mouse' 
-                    : '¡Hola! Soy el Ratoncito Pérez'
+                    ? 'Hello! I\'m King Boy Buby' 
+                    : '¡Hola! Soy el Rey Niño Buby'
                   }
                 </h3>
                 <p 
@@ -380,10 +378,9 @@ const ChatPage = ({
                   <span 
                     className="font-body text-sm"
                     style={{ color: COLORS.BLACK }}
-                  >
-                    {userProfile.language === 'en' 
-                      ? (isLoading ? 'Thinking...' : 'Tooth Mouse is typing')
-                      : (isLoading ? 'Pensando...' : 'Ratoncito Pérez está escribiendo')
+                  >                    {userProfile.language === 'en' 
+                      ? (isLoading ? 'Thinking...' : 'King Boy Buby is typing')
+                      : (isLoading ? 'Pensando...' : 'Rey Niño Buby está escribiendo')
                     }
                   </span>
                   <div className="flex gap-1 ml-2">

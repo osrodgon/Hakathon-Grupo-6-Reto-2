@@ -4,6 +4,7 @@ import Button from '../components/common/Button';
 import Card, { CardTitle, CardContent } from '../components/common/Card';
 import { COLORS } from '../config/constants';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
+import log2 from '../images/log2.png';
 
 /**
  * Página principal de la aplicación
@@ -87,23 +88,14 @@ const HomePage = ({ userProfile, onNavigate, getPersonalizedGreeting }) => {
       style={{ backgroundColor: COLORS.BACKGROUND }}
     >
       <div className="max-w-md mx-auto space-y-6">
-        
-        {/* Encabezado de bienvenida */}
+          {/* Encabezado de bienvenida */}
         <div className="text-center">
           <div className="relative inline-block mb-4">
-            <div 
-              className="w-20 h-20 rounded-full flex items-center justify-center animate-bounce-soft"
-              style={{ backgroundColor: COLORS.PRIMARY_YELLOW }}
-            >
-              <Gift 
-                className="w-10 h-10"
-                style={{ color: COLORS.SECONDARY_RED }} 
-              />
-            </div>
-            <Sparkles 
-              className="absolute -top-2 -right-2 w-6 h-6 animate-pulse-glow"
-              style={{ color: COLORS.SECONDARY_BLUE }} 
-            />
+            <img 
+              src={log2} 
+              alt="Ratoncito Pérez Logo" 
+              className="w-50 h-50 object-contain animate-bounce-soft"
+            />            
           </div>
           
           <h1 

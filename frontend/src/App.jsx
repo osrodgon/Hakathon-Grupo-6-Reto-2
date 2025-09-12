@@ -57,7 +57,6 @@ const App = () => {
         setUserLocation({ lat: 40.4168, lng: -3.7038 });
       });
   }, []);
-
   // Verificar si el usuario ya tiene un perfil configurado
   useEffect(() => {
     if (currentScreen === 'loading') {
@@ -65,10 +64,7 @@ const App = () => {
       return;
     }
     
-    // Si el usuario ya completó su perfil, ir directamente al home
-    if (!userProfile.isFirstTime && currentScreen === 'profile') {
-      setCurrentScreen('home');
-    }
+    // No redirigir automáticamente del profile - permitir acceso siempre
   }, [userProfile, currentScreen]);
 
   /**

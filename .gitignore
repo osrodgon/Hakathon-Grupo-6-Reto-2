@@ -51,7 +51,7 @@ model/
 *.csv
 *.tsv
 *.xlsx
-*.json
+
 
 # Mantener JSON concretosde POIs
 !backend/references/pois.json 
