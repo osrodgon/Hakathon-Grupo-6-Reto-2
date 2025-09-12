@@ -253,6 +253,7 @@ allow_origins=["http://localhost:3000"]
 echo $env:GOOGLE_API_KEY  # Windows PowerShell
 ```
 
+
 ## 👥 Autores
 
 **Grupo 6 - Factoría F5 Alvearium**
