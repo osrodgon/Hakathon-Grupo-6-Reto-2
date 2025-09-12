@@ -30,6 +30,8 @@ const CameraStream = ({
   const [sessionDuration, setSessionDuration] = useState(0);
   const [error, setError] = useState(null);
   const [cameraPermission, setCameraPermission] = useState('prompt'); // 'granted', 'denied', 'prompt'
+  const [annotatedImage, setAnnotatedImage] = useState(null); // Para mostrar imagen con detecciones
+  const [detectionCount, setDetectionCount] = useState(0);
 
   // Configuración
   const BACKEND_WS_URL = 'ws://localhost:8000/ws';
@@ -90,6 +92,9 @@ const CameraStream = ({
       videoRef.current.srcObject = null;
     }
 
+    // Limpiar estados de detección
+    setAnnotatedImage(null);
+    setDetectionCount(0);
     setIsCameraActive(false);
     console.log('✅ Cámara detenida');
   };
@@ -114,6 +119,13 @@ const CameraStream = ({
         try {
           const data = JSON.parse(event.data);
           console.log('📨 Mensaje del servidor:', data);
+          
+          // Manejar imagen anotada con detecciones
+          if (data.type === 'detection' && data.annotated_image) {
+            setAnnotatedImage(data.annotated_image);
+            setDetectionCount(data.detections ? data.detections.length : 0);
+            console.log(`🎯 Recibida imagen con ${data.detections?.length || 0} detecciones`);
+          }
           
           if (onAnalysisResult) {
             onAnalysisResult(data);
@@ -319,6 +331,19 @@ const CameraStream = ({
               style={{ display: isCameraActive ? 'block' : 'none' }}
             />
             
+            {/* Imagen anotada superpuesta */}
+            {isCameraActive && annotatedImage && (
+              <img
+                src={annotatedImage}
+                alt="Detecciones"
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                style={{ 
+                  opacity: 0.9,
+                  mixBlendMode: 'normal'
+                }}
+              />
+            )}
+            
             {/* Canvas oculto para captura de frames */}
             <canvas
               ref={canvasRef}
@@ -365,6 +390,17 @@ const CameraStream = ({
                 <div>Frames: {frameCount}</div>
                 <div>FPS: {fps.toFixed(1)}</div>
                 <div>Tiempo: {sessionDuration.toFixed(1)}s</div>
+                <div className={`${detectionCount > 0 ? 'text-green-400' : 'text-gray-400'}`}>
+                  🐭 Detecciones: {detectionCount}
+                </div>
+              </div>
+            )}
+            
+            {/* Indicador de detección activa */}
+            {isCameraActive && detectionCount > 0 && (
+              <div className="absolute top-3 left-3 flex items-center gap-1 bg-green-600 text-white px-2 py-1 rounded-full text-xs animate-pulse">
+                <div className="w-2 h-2 bg-white rounded-full"></div>
+                <span>¡Ratoncito Pérez detectado!</span>
               </div>
             )}
           </div>
