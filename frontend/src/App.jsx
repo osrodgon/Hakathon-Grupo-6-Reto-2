@@ -10,6 +10,7 @@ import HomePage from './pages/HomePage';
 import ChatPage from './pages/ChatPage';
 import MapPage from './pages/MapPage';
 import AboutPage from './pages/AboutPage';
+import CameraPage from './pages/CameraPage';
 
 // Importar componentes
 import FloatingMenu from './components/navigation/FloatingMenu';
@@ -57,6 +58,7 @@ const App = () => {
         setUserLocation({ lat: 40.4168, lng: -3.7038 });
       });
   }, []);
+
   // Verificar si el usuario ya tiene un perfil configurado
   useEffect(() => {
     if (currentScreen === 'loading') {
@@ -64,7 +66,10 @@ const App = () => {
       return;
     }
     
-    // No redirigir automáticamente del profile - permitir acceso siempre
+    // Si el usuario ya completó su perfil, ir directamente al home
+    if (!userProfile.isFirstTime && currentScreen === 'profile') {
+      setCurrentScreen('home');
+    }
   }, [userProfile, currentScreen]);
 
   /**
@@ -189,6 +194,14 @@ const App = () => {
       case 'about':
         return (
           <AboutPage
+            userProfile={userProfile}
+            onNavigate={handleNavigation}
+          />
+        );
+
+      case 'camera':
+        return (
+          <CameraPage
             userProfile={userProfile}
             onNavigate={handleNavigation}
           />

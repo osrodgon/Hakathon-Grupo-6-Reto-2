@@ -1,9 +1,8 @@
 import React from 'react';
-import { Star, Heart, Users, Crown, Gift, Sparkles, User } from 'lucide-react';
+import { Star, Heart, Users, Crown, Gift, Sparkles } from 'lucide-react';
 import Card, { CardTitle, CardContent } from '../components/common/Card';
 import Button from '../components/common/Button';
 import { COLORS } from '../config/constants';
-import app3 from '../images/app3.png';
 
 /**
  * Página "Sobre Nosotros" con información del proyecto y equipo
@@ -12,62 +11,25 @@ import app3 from '../images/app3.png';
  * @param {function} props.onNavigate - Función de navegación
  */
 const AboutPage = ({ userProfile, onNavigate }) => {
-    /**
+  
+  /**
    * Información del equipo de desarrollo
    */
   const teamMembers = [
     {
-      name: "Stephany Ángeles Lizárraga",
-      role: userProfile.language === 'en' ? "Frontend Developer" : "Desarrolladora Frontend",
-      github: "stephyangeles",
+      name: "Equipo Madrid Mágico",
+      role: userProfile.language === 'en' ? "Developers & Storytellers" : "Desarrolladores y Narradores",
       description: userProfile.language === 'en' 
-        ? "Creates magical user interfaces and seamless user experiences"
-        : "Crea interfaces mágicas y experiencias de usuario fluidas",
+        ? "Passionate about creating magical experiences that combine culture and fun"
+        : "Apasionados por crear experiencias mágicas que combinan cultura y diversión",
       icon: Heart
     },
     {
-      name: "Oscar Rodriguez",
-      role: userProfile.language === 'en' ? "Backend Developer" : "Desarrollador Backend",
-      github: "osrodgon",
+      name: "Ratoncito Pérez",
+      role: userProfile.language === 'en' ? "Chief Magical Officer" : "Director de Magia",
       description: userProfile.language === 'en'
-        ? "Builds robust APIs and server-side magic for our adventures"
-        : "Construye APIs robustas y magia del lado del servidor para nuestras aventuras",
-      icon: User
-    },
-    {
-      name: "Monica G",
-      role: userProfile.language === 'en' ? "UI/UX Designer" : "Diseñadora UI/UX",
-      github: "monigogo",
-      description: userProfile.language === 'en'
-        ? "Designs beautiful and intuitive experiences for all adventurers"
-        : "Diseña experiencias hermosas e intuitivas para todos los aventureros",
-      icon: Sparkles
-    },
-    {
-      name: "Maribel Gutiérrez",
-      role: userProfile.language === 'en' ? "Full Stack Developer" : "Desarrolladora Full Stack",
-      github: "MaribelGR-dev",
-      description: userProfile.language === 'en'
-        ? "Masters both frontend and backend to create complete magical solutions"
-        : "Domina tanto frontend como backend para crear soluciones mágicas completas",
-      icon: Gift
-    },
-    {
-      name: "Alfonso Bermúdez",
-      role: userProfile.language === 'en' ? "DevOps Engineer" : "Ingeniero DevOps",
-      github: "GHalfbbt",
-      description: userProfile.language === 'en'
-        ? "Ensures our magical platform runs smoothly and scales beautifully"
-        : "Asegura que nuestra plataforma mágica funcione sin problemas y escale hermosamente",
-      icon: Users
-    },
-    {
-      name: "Juan Carlos Macías",
-      role: userProfile.language === 'en' ? "Tech Lead & AI Engineer" : "Líder Técnico e Ingeniero de IA",
-      github: "juancmacias",
-      description: userProfile.language === 'en'
-        ? "Leads our technical vision and brings AI magic to enhance user experiences"
-        : "Lidera nuestra visión técnica y aporta magia de IA para mejorar las experiencias de usuario",
+        ? "Our beloved virtual guide who brings Madrid to life with incredible stories"
+        : "Nuestro querido guía virtual que hace que Madrid cobre vida con historias increíbles",
       icon: Crown
     }
   ];
@@ -104,13 +66,14 @@ const AboutPage = ({ userProfile, onNavigate }) => {
       className="min-h-screen p-6"
       style={{ backgroundColor: COLORS.BACKGROUND }}
     >
-      <div className="max-w-md mx-auto space-y-6">        {/* Encabezado */}
+      <div className="max-w-md mx-auto space-y-6">
+        
+        {/* Encabezado */}
         <div className="text-center mb-8">
-          <div className="animate-bounce-soft mb-2">
-            <img 
-              src={app3} 
-              alt="Logo Sobre Nosotros" 
-              className="w-50 h-50 mx-auto object-contain"
+          <div className="animate-bounce-soft mb-4">
+            <Star 
+              className="w-16 h-16 mx-auto"
+              style={{ color: COLORS.PRIMARY_BROWN }} 
             />
           </div>
           <h1 
@@ -204,29 +167,14 @@ const AboutPage = ({ userProfile, onNavigate }) => {
                           className="w-6 h-6"
                           style={{ color: COLORS.WHITE }} 
                         />
-                      </div>                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 
-                            className="font-title font-bold text-lg"
-                            style={{ color: COLORS.PRIMARY_BROWN }}
-                          >
-                            {member.name}
-                          </h3>
-                          {member.github && (
-                            <a
-                              href={`https://github.com/${member.github}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs px-2 py-1 rounded-full hover:opacity-80 transition-opacity"
-                              style={{ 
-                                backgroundColor: COLORS.PRIMARY_YELLOW,
-                                color: COLORS.SECONDARY_RED
-                              }}
-                            >
-                              @{member.github}
-                            </a>
-                          )}
-                        </div>
+                      </div>
+                      <div>
+                        <h3 
+                          className="font-title font-bold text-lg"
+                          style={{ color: COLORS.PRIMARY_BROWN }}
+                        >
+                          {member.name}
+                        </h3>
                         <p 
                           className="font-body text-sm font-semibold mb-2"
                           style={{ color: COLORS.SECONDARY_BLUE }}

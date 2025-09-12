@@ -27,19 +27,22 @@ fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
 pydantic>=2.5.0
 python-multipart>=0.0.6
+websockets>=11.0.0
 
 # Utilidades adicionales para la API
 httpx>=0.25.2
 aiofiles>=23.2.1
 
+# Computer Vision y procesamiento de imágenes
+Pillow>=10.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0
+
+opencv-python>=4.8.0
+huggingface-hub>=0.17.0
+numpy>=1.24.0
+
 # Configuración y utilidades
 python-dotenv>=1.0.0
-
-# Base de datos y ORM
-sqlmodel
-sqlalchemy>=2.0
-aiosqlite
-
-#  MongoDB (si se usa MongoDB en lugar de SQLite)
-motor>=3.5.1
 

@@ -272,13 +272,11 @@ Este proyecto está licenciado bajo la **Licencia MIT** - ver el archivo [LICENS
 
 ## 🙏 Agradecimientos
 
-
 - **Factoría F5** por la oportunidad del hackathon
 - **CrewAI** por el framework de agentes IA
 - **Google** por la API de Gemini
 - **OpenStreetMap** por los datos geográficos
 - **Comunidad Open Source** por las librerías utilizadas
-
 
 ---
 

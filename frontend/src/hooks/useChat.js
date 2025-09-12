@@ -14,22 +14,24 @@ export const useChat = (userProfile) => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory]);
+
   /**
-   * Genera respuestas contextuales del Rey Niño Buby
+   * Genera respuestas contextuales del Ratoncito Pérez
    * @param {string} message - Mensaje del usuario
-   * @returns {string} Respuesta del Rey Niño Buby
+   * @returns {string} Respuesta del Ratoncito Pérez
    */
-  const generateReyNinoBubyResponse = (message) => {
+  const generateRatoncitoPerezResponse = (message) => {
     const isChild = userProfile.type === 'child';
     const isEnglish = userProfile.language === 'en';
-      // Respuestas en inglés para niños
+    
+    // Respuestas en inglés para niños
     const childResponsesEN = [
-      "👑✨ Hello little adventurer! Would you like to play a royal treasure hunt in Madrid?",
-      "How exciting! I know a super fun royal game in this place. Can you count how many windows you see?",
-      "You have an incredible imagination! Did you know I keep my royal treasures here?",
-      "I love talking to you! Would you like me to tell you the royal secret of this magical place?",
-      "🎮 Let's play! Can you find three things that are golden like my royal crown?",
-      "✨ Royal question: If you could rule like me, where in Madrid would you build your castle first?"
+      "🐭✨ Hello little adventurer! Would you like to play a magical treasure hunt in Madrid?",
+      "How exciting! I know a super fun game in this place. Can you count how many windows you see?",
+      "You have an incredible imagination! Did you know I hide my most precious treasures here?",
+      "I love talking to you! Would you like me to tell you the secret of this magical place?",
+      "🎮 Let's play! Can you find three things that are yellow like my favorite cheese?",
+      "✨ Magic question: If you could fly like me, where in Madrid would you go first?"
     ];
 
     // Respuestas en inglés para adultos
@@ -39,14 +41,16 @@ export const useChat = (userProfile) => {
       "From an educational perspective, this site offers multiple learning opportunities for the whole family.",
       "Madrid's history can be perfectly appreciated from this strategic point in the city.",
       "This location offers excellent family activities with educational components suitable for all ages."
-    ];    // Respuestas en español para niños
+    ];
+
+    // Respuestas en español para niños
     const childResponsesES = [
-      "👑✨ ¡Hola pequeño aventurero! ¿Te gustaría jugar a encontrar tesoros reales por Madrid?",
-      "¡Qué emocionante! Conozco un juego real súper divertido en este lugar. ¿Puedes contar cuántas ventanas ves?",
-      "¡Tienes una imaginación increíble! ¿Sabías que aquí guardo mis tesoros reales más preciados?",
-      "¡Me encanta hablar contigo! ¿Quieres que te cuente el secreto real de este lugar mágico?",
-      "🎮 ¡Vamos a jugar! ¿Puedes encontrar tres cosas que sean doradas como mi corona real?",
-      "✨ Pregunta real: Si pudieras gobernar como yo, ¿dónde construirías tu castillo primero en Madrid?"
+      "🐭✨ ¡Hola pequeño aventurero! ¿Te gustaría jugar a encontrar pistas mágicas por Madrid?",
+      "¡Qué emocionante! Conozco un juego súper divertido en este lugar. ¿Puedes contar cuántas ventanas ves?",
+      "¡Tienes una imaginación increíble! ¿Sabías que aquí escondo mis tesoros más preciados?",
+      "¡Me encanta hablar contigo! ¿Quieres que te cuente el secreto de este lugar mágico?",
+      "🎮 ¡Vamos a jugar! ¿Puedes encontrar tres cosas que sean amarillas como mi queso favorito?",
+      "✨ Pregunta mágica: Si pudieras volar como yo, ¿a dónde irías primero en Madrid?"
     ];
 
     // Respuestas en español para adultos
@@ -85,11 +89,14 @@ export const useChat = (userProfile) => {
 
     setChatHistory(prev => [...prev, userMsg]);
     setCurrentMessage('');
-    setIsTyping(true);    // Simular tiempo de respuesta del Rey Niño Buby
+    setIsTyping(true);
+
+    // Simular tiempo de respuesta del Ratoncito Pérez
     setTimeout(() => {
-      const response = generateReyNinoBubyResponse(message);
-        setChatHistory(prev => [...prev, {
-        type: 'rey',
+      const response = generateRatoncitoPerezResponse(message);
+      
+      setChatHistory(prev => [...prev, {
+        type: 'ratoncito',
         content: response,
         timestamp: new Date(),
         id: Date.now() + 1
@@ -133,17 +140,20 @@ export const useChat = (userProfile) => {
       const greeting = getTimeBasedGreeting();
       const isChild = userProfile.type === 'child';
       const isEnglish = userProfile.language === 'en';
-        let welcomeMessage;
+      
+      let welcomeMessage;
       if (isEnglish) {
         welcomeMessage = isChild 
-          ? `${greeting} little adventurer! 👑✨ I'm King Boy Buby and I'm here to show you the royal secrets of Madrid. Ready for an incredible royal adventure?`
+          ? `${greeting} little adventurer! 🐭✨ I'm the Tooth Mouse and I'm here to show you the magical secrets of Madrid. Ready for an incredible adventure?`
           : `${greeting}! I'm here to enrich your family visit to Madrid with fascinating cultural information and stories.`;
       } else {
         welcomeMessage = isChild
-          ? `${greeting} pequeño aventurero! 👑✨ Soy el Rey Niño Buby y estoy aquí para mostrarte los secretos reales de Madrid. ¿Estás listo para una aventura real increíble?`
+          ? `${greeting} pequeño aventurero! 🐭✨ Soy el Ratoncito Pérez y estoy aquí para mostrarte los secretos mágicos de Madrid. ¿Estás listo para una aventura increíble?`
           : `${greeting}! Estoy aquí para enriquecer su visita familiar a Madrid con información cultural e historias fascinantes.`;
-      }      return [{
-        type: 'rey',
+      }
+
+      return [{
+        type: 'ratoncito',
         content: welcomeMessage,
         timestamp: new Date(),
         id: Date.now()

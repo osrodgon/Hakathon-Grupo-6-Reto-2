@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { Send, Crown } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Send, Crown, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import Button from '../components/common/Button';
 import Card, { CardContent } from '../components/common/Card';
 import { COLORS } from '../config/constants';
 import { formatTime } from '../utils/dateUtils';
-import app5 from '../images/app5.png';
-
+import { getCurrentLocation } from '../utils/locationUtils';
 
 /**
  * Página de chat interactivo con el Ratoncito Pérez
@@ -21,22 +20,241 @@ const ChatPage = ({
   // Estado local para manejar la carga
   const [isLoading, setIsLoading] = useState(false);
 
+  // Estado para el reconocimiento de voz
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const recognitionRef = useRef(null);
+
+  // Estado para síntesis de voz (text-to-speech)
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechSynthesisSupported, setSpeechSynthesisSupported] = useState(false);
+  const speechSynthesisRef = useRef(null);
+
   // Configuración del backend API
   const BACKEND_URL = 'http://127.0.0.1:8000';
   const USE_MOCK_BACKEND = false;
 
   /**
    * Función mock para simular respuestas del backend durante desarrollo
-   */  const mockBackendResponse = async (query) => {
-    const response = `¡Hola! Recibí tu mensaje: "${query}". Soy el Rey Niño Buby 👑✨`;
+   */
+  const mockBackendResponse = async (query) => {
+    const response = `¡Hola! Recibí tu mensaje: "${query}". Soy el Ratoncito Pérez 🐭✨`;
     await new Promise(resolve => setTimeout(resolve, 500));
     return response;
+  };
+
+  /**
+   * Inicializa el reconocimiento de voz y síntesis de voz
+   */
+  useEffect(() => {
+    // Verificar si el navegador soporta Web Speech API
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      setSpeechSupported(true);
+      
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      // Configuración del reconocimiento
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = userProfile.language === 'en' ? 'en-US' : 'es-ES';
+      
+      // Eventos del reconocimiento
+      recognition.onstart = () => {
+        setIsListening(true);
+        console.log('🎤 Reconocimiento de voz iniciado');
+      };
+      
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('🗣️ Texto reconocido:', transcript);
+        
+        setChatData(prev => ({
+          ...prev,
+          currentMessage: transcript
+        }));
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('❌ Error en reconocimiento de voz:', event.error);
+        setIsListening(false);
+      };
+      
+      recognition.onend = () => {
+        setIsListening(false);
+        console.log('🎤 Reconocimiento de voz finalizado');
+      };
+      
+      recognitionRef.current = recognition;
+    } else {
+      console.log('⚠️ Reconocimiento de voz no soportado en este navegador');
+      setSpeechSupported(false);
+    }
+
+    // Verificar si el navegador soporta Speech Synthesis
+    if ('speechSynthesis' in window) {
+      setSpeechSynthesisSupported(true);
+      speechSynthesisRef.current = window.speechSynthesis;
+      console.log('🔊 Síntesis de voz disponible');
+    } else {
+      console.log('⚠️ Síntesis de voz no soportada en este navegador');
+      setSpeechSynthesisSupported(false);
+    }
+    
+    // Cleanup
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+      if (speechSynthesisRef.current) {
+        speechSynthesisRef.current.cancel();
+      }
+    };
+  }, [userProfile.language]);
+
+  /**
+   * Inicia o detiene el reconocimiento de voz
+   */
+  const toggleSpeechRecognition = () => {
+    if (!speechSupported || !recognitionRef.current) {
+      alert(userProfile.language === 'en' 
+        ? 'Voice recognition is not supported in your browser'
+        : 'El reconocimiento de voz no está soportado en tu navegador'
+      );
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      try {
+        recognitionRef.current.start();
+      } catch (error) {
+        console.error('Error al iniciar reconocimiento:', error);
+        setIsListening(false);
+      }
+    }
+  };
+
+  /**
+   * Función para limpiar texto antes de la síntesis de voz
+   */
+  const cleanTextForSpeech = (text) => {
+    if (!text) return '';
+    
+    return text
+      // Remover encabezados markdown (# ## ### etc.)
+      .replace(/^#{1,6}\s+/gm, '')
+      // Remover markdown bold y cursiva
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/__(.*?)__/g, '$1')
+      .replace(/_(.*?)_/g, '$1')
+      // Remover listas markdown
+      .replace(/^\s*[-*+]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      // Remover enlaces markdown [texto](url)
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      // Remover código inline `código`
+      .replace(/`([^`]+)`/g, '$1')
+      // Remover bloques de código ```
+      .replace(/```[\s\S]*?```/g, '')
+      // Remover caracteres especiales de markdown
+      .replace(/[#*_`~\[\](){}|\\]/g, '')
+      // Remover guiones largos y caracteres especiales
+      .replace(/[-—–]/g, ' ')
+      // Remover emojis comunes
+      .replace(/🐭|✨|🎮|💡|🔍|🎭|🌟|📚|🏛️|🚶‍♂️|🎨|🏆|🎤|🔊|⚠️|❌|🗣️|🌤️|☀️|🌧️|❄️|🌈/g, '')
+      // Remover saltos de línea múltiples y reemplazar con espacios
+      .replace(/\n+/g, ' ')
+      // Remover espacios múltiples
+      .replace(/\s+/g, ' ')
+      // Remover puntos suspensivos múltiples
+      .replace(/\.{2,}/g, '.')
+      // Remover caracteres especiales adicionales
+      .replace(/[^\w\s.,;:!?¿¡áéíóúñüÁÉÍÓÚÑÜ]/g, ' ')
+      // Limpiar espacios al inicio y final
+      .trim();
+  };
+
+  /**
+   * Lee en voz alta la última respuesta del Ratoncito Pérez
+   */
+  const speakLastResponse = () => {
+    if (!speechSynthesisSupported || !speechSynthesisRef.current) {
+      alert(userProfile.language === 'en' 
+        ? 'Text-to-speech is not supported in your browser'
+        : 'La síntesis de voz no está soportada en tu navegador'
+      );
+      return;
+    }
+
+    // Detener cualquier síntesis en curso
+    if (isSpeaking) {
+      speechSynthesisRef.current.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    // Buscar la última respuesta del ratoncito
+    const lastRatoncitoMessage = [...chatData.chatHistory]
+      .reverse()
+      .find(msg => msg.type === 'ratoncito');
+
+    if (!lastRatoncitoMessage) {
+      console.log('No hay mensajes del ratoncito para leer');
+      return;
+    }
+
+    const textToSpeak = cleanTextForSpeech(lastRatoncitoMessage.content);
+    
+    if (!textToSpeak) {
+      console.log('No hay texto válido para leer');
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    
+    // Configurar la voz según el idioma
+    utterance.lang = userProfile.language === 'en' ? 'en-US' : 'es-ES';
+    utterance.rate = 0.9; // Velocidad ligeramente más lenta para mayor claridad
+    utterance.pitch = 1.1; // Tono ligeramente más alto para sonar más amigable
+    utterance.volume = 0.8;
+
+    // Eventos de la síntesis
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      console.log('🔊 Iniciando síntesis de voz');
+    };
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      console.log('🔊 Síntesis de voz completada');
+    };
+
+    utterance.onerror = (event) => {
+      console.error('❌ Error en síntesis de voz:', event.error);
+      setIsSpeaking(false);
+    };
+
+    // Intentar seleccionar una voz apropiada
+    const voices = speechSynthesisRef.current.getVoices();
+    const preferredVoice = voices.find(voice => 
+      voice.lang.startsWith(userProfile.language === 'en' ? 'en' : 'es')
+    );
+    
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    speechSynthesisRef.current.speak(utterance);
   };
 
   /**
    * Función para llamar al endpoint /guide del backend
    */
   const callBackendGuide = async (query) => {
+    const location = await getCurrentLocation();
     try {
       console.log('=== LLAMADA AL BACKEND ===');
       console.log('Query:', query);
@@ -47,10 +265,10 @@ const ChatPage = ({
       
       const payload = {
         query: String(query),
-        lat: null,
-        lon: null, 
-        radio_km: 1.0,
-        categoria: null,
+        lat: location.lat,
+        lon: location.lon,
+        radio_km: 0.5,
+        categoria: 'museo',
         adulto: Boolean(userProfile.type === 'parent'),
         infantil: Boolean(userProfile.type === 'child'),
         accesibilidad: Boolean(userProfile.accessibility && userProfile.accessibility !== 'none')
@@ -160,9 +378,11 @@ const ChatPage = ({
 
       if (!response) {
         throw new Error('Respuesta vacía del backend');
-      }      // 4. Agregar respuesta del backend
+      }
+
+      // 4. Agregar respuesta del backend
       const botMsg = {
-        type: 'rey',
+        type: 'ratoncito',
         content: response,
         timestamp: new Date(),
         id: `bot_${Date.now()}`
@@ -286,26 +506,24 @@ const ChatPage = ({
           borderColor: COLORS.GRAY_LIGHT 
         }}
       >
-        <div className="max-w-2xl mx-auto">          <div className="flex items-center gap-3">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center gap-3">
             <div 
-              className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden"
+              className="w-12 h-12 rounded-full flex items-center justify-center"
               style={{ backgroundColor: COLORS.PRIMARY_YELLOW }}
             >
-              <img 
-                src={app5} 
-                alt="Rey Niño Buby" 
-                className="w-30 h-30 object-contain"
+              <Crown 
+                className="w-6 h-6"
+                style={{ color: COLORS.PRIMARY_BROWN }} 
               />
             </div>
             <div className="flex-1">
-              <div className="flex items-center gap-2">                <h2 
-                  className="font-title font-bold text-lg"
-                  style={{ color: COLORS.PRIMARY_BROWN }}
-                >
-                  {userProfile.language === 'en' ? 'King Boy Buby' : 'Rey Niño Buby'}
-                </h2>
-                <div className={`w-3 h-3 rounded-full ${USE_MOCK_BACKEND ? 'bg-yellow-500' : 'bg-green-500'}`} />
-              </div>
+              <h2 
+                className="font-title font-bold text-lg"
+                style={{ color: COLORS.PRIMARY_BROWN }}
+              >
+                {userProfile.language === 'en' ? 'Tooth Mouse' : 'Ratoncito Pérez'}
+              </h2>
               <p 
                 className="text-sm font-body opacity-75"
                 style={{ color: COLORS.BLACK }}
@@ -317,7 +535,8 @@ const ChatPage = ({
               </p>
             </div>
             <div className="flex flex-col items-end">
-              <span className="text-xs" style={{ color: COLORS.PRIMARY_BROWN }}>
+              <div className={`w-3 h-3 rounded-full ${USE_MOCK_BACKEND ? 'bg-yellow-500' : 'bg-green-500'}`} />
+              <span className="text-xs mt-1" style={{ color: COLORS.PRIMARY_BROWN }}>
                 {USE_MOCK_BACKEND ? 'Demo' : 'Live'}
               </span>
             </div>
@@ -336,13 +555,14 @@ const ChatPage = ({
                 <Crown 
                   className="w-12 h-12 mx-auto mb-3"
                   style={{ color: COLORS.PRIMARY_BROWN }} 
-                />                <h3 
+                />
+                <h3 
                   className="font-title font-bold text-lg mb-2"
                   style={{ color: COLORS.PRIMARY_BROWN }}
                 >
                   {userProfile.language === 'en' 
-                    ? 'Hello! I\'m King Boy Buby' 
-                    : '¡Hola! Soy el Rey Niño Buby'
+                    ? 'Hello! I\'m the Tooth Mouse' 
+                    : '¡Hola! Soy el Ratoncito Pérez'
                   }
                 </h3>
                 <p 
@@ -378,9 +598,10 @@ const ChatPage = ({
                   <span 
                     className="font-body text-sm"
                     style={{ color: COLORS.BLACK }}
-                  >                    {userProfile.language === 'en' 
-                      ? (isLoading ? 'Thinking...' : 'King Boy Buby is typing')
-                      : (isLoading ? 'Pensando...' : 'Rey Niño Buby está escribiendo')
+                  >
+                    {userProfile.language === 'en' 
+                      ? (isLoading ? 'Thinking...' : 'Tooth Mouse is typing')
+                      : (isLoading ? 'Pensando...' : 'Ratoncito Pérez está escribiendo')
                     }
                   </span>
                   <div className="flex gap-1 ml-2">
@@ -446,6 +667,52 @@ const ChatPage = ({
               disabled={isTyping || isLoading}
             />
             
+            {/* Botón de micrófono */}
+            {speechSupported && (
+              <Button
+                variant={isListening ? "secondary" : "primary"}
+                onClick={toggleSpeechRecognition}
+                disabled={isTyping || isLoading}
+                className="px-4"
+                title={userProfile.language === 'en' 
+                  ? (isListening ? 'Stop listening' : 'Start voice input')
+                  : (isListening ? 'Dejar de escuchar' : 'Iniciar entrada de voz')
+                }
+              >
+                {isListening ? (
+                  <MicOff 
+                    className="w-5 h-5 animate-pulse" 
+                    style={{ color: COLORS.SECONDARY_RED }}
+                  />
+                ) : (
+                  <Mic className="w-5 h-5" />
+                )}
+              </Button>
+            )}
+
+            {/* Botón de altavoz para leer la última respuesta */}
+            {speechSynthesisSupported && (
+              <Button
+                variant={isSpeaking ? "secondary" : "primary"}
+                onClick={speakLastResponse}
+                disabled={isTyping || isLoading || chatData.chatHistory.filter(msg => msg.type === 'ratoncito').length === 0}
+                className="px-4"
+                title={userProfile.language === 'en' 
+                  ? (isSpeaking ? 'Stop reading' : 'Read last response aloud')
+                  : (isSpeaking ? 'Dejar de leer' : 'Leer última respuesta en voz alta')
+                }
+              >
+                {isSpeaking ? (
+                  <VolumeX 
+                    className="w-5 h-5 animate-pulse" 
+                    style={{ color: COLORS.SECONDARY_RED }}
+                  />
+                ) : (
+                  <Volume2 className="w-5 h-5" />
+                )}
+              </Button>
+            )}
+            
             <Button
               variant="secondary"
               onClick={handleSendMessage}
@@ -455,6 +722,56 @@ const ChatPage = ({
               <Send className="w-5 h-5" />
             </Button>
           </div>
+
+          {/* Indicador de estado de voz */}
+          {isListening && (
+            <div 
+              className="mt-2 text-center text-sm font-body animate-pulse"
+              style={{ color: COLORS.SECONDARY_RED }}
+            >
+              {userProfile.language === 'en' 
+                ? '🎤 Listening... Speak now!'
+                : '🎤 Escuchando... ¡Habla ahora!'
+              }
+            </div>
+          )}
+
+          {/* Indicador de síntesis de voz */}
+          {isSpeaking && (
+            <div 
+              className="mt-2 text-center text-sm font-body animate-pulse"
+              style={{ color: COLORS.SECONDARY_BLUE }}
+            >
+              {userProfile.language === 'en' 
+                ? '🔊 Reading aloud...'
+                : '🔊 Leyendo en voz alta...'
+              }
+            </div>
+          )}
+
+          {!speechSupported && !speechSynthesisSupported && (
+            <div 
+              className="mt-2 text-center text-xs font-body opacity-60"
+              style={{ color: COLORS.PRIMARY_BROWN }}
+            >
+              {userProfile.language === 'en' 
+                ? '⚠️ Voice features not available in this browser'
+                : '⚠️ Funciones de voz no disponibles en este navegador'
+              }
+            </div>
+          )}
+
+          {(speechSupported || speechSynthesisSupported) && !(speechSupported && speechSynthesisSupported) && (
+            <div 
+              className="mt-2 text-center text-xs font-body opacity-60"
+              style={{ color: COLORS.PRIMARY_BROWN }}
+            >
+              {userProfile.language === 'en' 
+                ? (speechSupported ? '⚠️ Voice output not available' : '⚠️ Voice input not available')
+                : (speechSupported ? '⚠️ Salida de voz no disponible' : '⚠️ Entrada de voz no disponible')
+              }
+            </div>
+          )}
         </div>
       </div>
     </div>

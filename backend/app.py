@@ -1,108 +1,37 @@
-#!/usr/bin/env python3
 """
-FastAPI Application para el Agente Turístico de Madrid
-Backend API REST para el agente CrewAI con Gemini + PDFs + OpenStreetMap
+FastAPI Backend - Ratoncito Pérez API
+Versión con YOLOv8 nativo usando Ultralytics
 """
-
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query, Request
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
-import uvicorn
-import sys
 import asyncio
-from datetime import datetime, timezone
+import uvicorn
+from pydantic import BaseModel, Field
+import base64
+import json
+import time
+import cv2
+import numpy as np
+import os
+import sys
+from io import BytesIO
+from PIL import Image
+from datetime import datetime
+from fastapi import FastAPI, HTTPException, BackgroundTasks, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 import logging
-import os, glob, time
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession  # OJO: SQLModel, no SQLAlchemy
+from typing import Dict, List, Optional, Any
 
-# Carga variables de entorno desde .env
-from dotenv import load_dotenv
-load_dotenv()
+# Imports - Machine Learning 
+import torch
+import torch.nn.functional as F
+from ultralytics import YOLO
+from huggingface_hub import hf_hub_download
+from agent.agente_coordenadas import WEATHER_CODES, get_weather_forecast_json
 
-# Importa el store adecuado según DB_PROVIDER - SQLite o MongoDB
-from db.factory import get_store
-store = get_store()
-
-# === imports para la BD/servicios (añadir) ===
-# SQLModel + SQLite
-from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends
-
-from models.database import init_db, get_session
-from services.seed_pois import seed_pois_if_needed
-from services.location_service import save_location, prune_expired
-from services.recommend_service import top_pois
-
-logger = logging.getLogger("app")
-
-
-# helpers para vectorstore de ubicaciones
-def _vstore_dir():
-    # Directorio de la caché FAISS (por defecto backend/vectorstore_cache)
-    return os.getenv("LOCATION_VECTORSTORE_DIR") or os.path.join(os.path.dirname(__file__), "vectorstore_cache")
-
-def _pdf_dir():
-    # Directorio con los PDFs fuente (por defecto backend/pdfs_madrid)
-    return os.getenv("LOCATION_PDF_DIR") or os.path.join(os.path.dirname(__file__), "pdfs_madrid")
-
-def _ttl_days():
-    # TTL (en días) leído de .env; si no se define → sin TTL
-    raw = os.getenv("LOCATION_VECTORSTORE_TTL_DAYS")
-    try:
-        return int(raw) if raw not in (None, "") else None
-    except ValueError:
-        return None
-
-def _cache_exists(d):
-    # ¿Existen ambos archivos de FAISS?
-    return os.path.exists(os.path.join(d, "index.faiss")) and os.path.exists(os.path.join(d, "index.pkl"))
-
-def _cache_age_seconds(d):
-    # Edad (segundos) de la caché (mínima de los dos archivos)
-    f1, f2 = os.path.join(d, "index.faiss"), os.path.join(d, "index.pkl")
-    return time.time() - min(os.path.getmtime(f1), os.path.getmtime(f2))
-
-def _is_stale(d):
-    # ¿Falta la caché o está caducada por TTL?
-    if not _cache_exists(d):
-        return True
-    ttl = _ttl_days()
-    if ttl is None:
-        return False
-    return _cache_age_seconds(d) > ttl * 86400
-
-def _build_vectorstore_sync(logger):
-    # Construye la caché FAISS a partir de los PDFs (bloqueante)
-    d, pdir = _vstore_dir(), _pdf_dir()
-    os.makedirs(d, exist_ok=True)
-    pdfs = sorted(glob.glob(os.path.join(pdir, "*.pdf")))
-    if not pdfs:
-        logger.warning(f"[vectorstore] No hay PDFs en {pdir}; se omite construcción.")
-        return
-    docs = []
-    for pdf in pdfs:
-        docs.extend(PyPDFLoader(pdf).load())
-    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
-    chunks = splitter.split_documents(docs)
-    emb = HuggingFaceEmbeddings(
-        model_name=os.getenv("LOCATION_EMBEDDINGS_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
-    )
-    vs = FAISS.from_documents(chunks, emb)
-    vs.save_local(d)
-    logger.info(f"[vectorstore] Guardado en {d}")
-
-
-
-from backend.agent.agente_coordenadas import WEATHER_CODES, get_weather_forecast_json
-
-# Agregar el directorio agent al path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'agent'))
+# Configuración de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 try:
     from agent.agente_coordenadas import (
@@ -113,41 +42,69 @@ try:
         buscar_lugares_openstreetmap
     )
 except ImportError as e:
-    print(f"❌ Error importando módulos del agente: {e}")
+    print(f"âŒ Error importando mÃ³dulos del agente: {e}")
     sys.exit(1)
 
+# ============== CONFIGURACIÓN YOLO ==============
+HF_TOKEN = os.getenv('HF_TOKEN')  # Token para descargar modelos
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configuración del modelo YOLO personalizado
+YOLO_REPO_ID = "juancmamacias/hakathon_f5_mil"
+YOLO_FILENAME = "best.pt"
 
-# Crear la aplicación FastAPI
+# Solo detecta Ratoncito Pérez (clase 0)
+RATONCITO_CLASS_ID = 0
+RATONCITO_CLASS_NAME = "ratoncito_perez"
+
+INPUT_SIZE = 416
+CONF_THRESHOLD = 0.5
+model = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global llm, vectorstore, yolo_model
+    """Gestión del ciclo de vida de la aplicación"""
+    logger.info("🚀 Iniciando Ratoncito Pérez API...")
+    
+    # Cargar modelo YOLO al inicio
+    global model
+    model = await load_yolo_model()
+    # Configurar LLM
+    logger.info("âš™ï¸ Configurando LLM Gemini...")
+    llm = crear_llm_gemini()
+        
+        # Inicializar vectorstore
+    logger.info("ðŸ“š Inicializando vectorstore...")
+    vectorstore = inicializar_vectorstore()
+    logger.info("✅ Ratoncito Pérez API iniciado correctamente")
+    yield
+    # Cleanup al finalizar
+    logger.info("🔌 Cerrando Ratoncito Pérez API...")
+
 app = FastAPI(
-    title="Ratoncito Pérez Agent API",
-    description="API REST para el agente turístico de Madrid con CrewAI, Gemini y OpenStreetMap",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="Ratoncito Pérez Madrid API",
+    description="API para guía turística de Madrid con detección de personas",
+    version="2.0.0",
+    lifespan=lifespan
 )
 
-# Configurar CORS para permitir requests desde frontend
+# Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, especificar dominios específicos
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Modelos Pydantic para request/response
 class TourismQuery(BaseModel):
-    query: str = Field(..., description="Consulta turística del usuario")
-    lat: Optional[float] = Field(None, description="Latitud para búsqueda GPS")
-    lon: Optional[float] = Field(None, description="Longitud para búsqueda GPS")
-    radio_km: Optional[float] = Field(1.0, description="Radio de búsqueda en kilómetros")
-    categoria: Optional[str] = Field(None, description="Categoría de lugares")
+    query: str = Field(..., description="Consulta turÃ­stica del usuario")
+    lat: Optional[float] = Field(None, description="Latitud para bÃºsqueda GPS")
+    lon: Optional[float] = Field(None, description="Longitud para bÃºsqueda GPS")
+    radio_km: Optional[float] = Field(1.0, description="Radio de bÃºsqueda en kilÃ³metros")
+    categoria: Optional[str] = Field(None, description="CategorÃ­a de lugares")
     adulto: Optional[bool] = Field(False, description="Actividades para adultos")
-    infantil: Optional[bool] = Field(False, description="Actividades para niños")
+    infantil: Optional[bool] = Field(False, description="Actividades para niÃ±os")
     accesibilidad: Optional[bool] = Field(False, description="Opciones accesibles")
 
 
@@ -157,127 +114,337 @@ class TourismResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
     execution_time: Optional[float] = None
     timestamp: datetime
-
-class LocationIn(BaseModel):
-    user_id: str
-    latitude: float
-    longitude: float
-    age_range: Optional[str] = None       # "4-6" | "7-9" | "10-12"
-    pmr: bool = False
-    radius_m: int = 1000
-    profile_type: Optional[str] = None    # "parent" | "child"
-
-class ChatIn(BaseModel):
-    user_id: str
-    prompt: str
-    profile_type: str | None = None
-    pmr: bool | None = None
-    age_range: str | None = None
-    latitude: float | None = None
-    longitude: float | None = None
-
-class ChatOut(BaseModel):
-    id: str
-    user_id: str
-    prompt: str
-    response: str
-    model: str | None = None
-    created_at: str
-
     
 class ForecastResponse(BaseModel):
     forecast: str
     max: float
-    min: floa
+    min: float
+# ============== FUNCIONES YOLO ==============
 
-
-# Variables globales para el estado del agente
-llm = None
-vectorstore = None
-
-
-# Reconstruye vectorstore ausente/obsoleto (TTL expired)
-@app.on_event("startup")
-async def _ensure_vectorstore():
-    # Construcción SINCRÓNICA solo si falta o está caducado → evita el error del otro startup
-    d = _vstore_dir()
-    if _is_stale(d):
-        logger.info("📚 Vectorstore ausente/obsoleto → reconstruyendo (bloqueante, primera vez)…")
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, _build_vectorstore_sync, logger)
-    else:
-        logger.info("📚 Vectorstore presente/fresco → OK")
-    # ✅ marca listo
-    app.state.vectorstore_ready = True
+async def load_yolo_model():
+    """Cargar modelo YOLOv8 personalizado desde HuggingFace"""
+    logger.info("🔥 Cargando modelo YOLOv8 personalizado desde HuggingFace...")
     
-@app.on_event("startup")
-async def startup_event():
-    """Inicializar el agente al arrancar la aplicación"""
-    global llm, vectorstore
-
-    logger.info("🚀 Iniciando Ratoncito Pérez API...")
-
     try:
-        # Configurar LLM + Vectorstore (para CrewAI)
-        logger.info("⚙️ Configurando LLM Gemini...")
-        llm = crear_llm_gemini()
+        # Descargar modelo desde HuggingFace
+        logger.info(f"📥 Descargando modelo desde {YOLO_REPO_ID}")
+        model_path = hf_hub_download(
+            repo_id=YOLO_REPO_ID,
+            filename=YOLO_FILENAME,
+            token=HF_TOKEN
+        )
+        logger.info(f"✅ Modelo descargado en: {model_path}")
         
-        # Inicializar vectorstore
-        logger.info("📚 Inicializando vectorstore...")
-        vectorstore = inicializar_vectorstore()
-
-        # === Inicialización de BD + semillas + limpieza TTL ===
-        logger.info(f"🗄️ Inicializando almacenamiento (LOCAL={os.getenv('LOCAL','true')})...")
-        await store.init()
-        await store.seed_pois(pois=[])
-        await store.prune_expired() # limpia ubicaciones expiradas
+        # Cargar modelo YOLOv8 nativo
+        model = YOLO(model_path)
         
-        logger.info("✅ Ratoncito Pérez API iniciado correctamente")
-
+        # Verificar CUDA
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        logger.info(f"🎯 Dispositivo: {device}")
+        
+        # Mover modelo al dispositivo
+        model.to(device)
+        
+        logger.info("✅ Modelo YOLOv8 cargado correctamente")
+        logger.info(f"📋 Modelo: {YOLO_FILENAME}")
+        logger.info(f"🎯 Clase objetivo: {RATONCITO_CLASS_ID} ({RATONCITO_CLASS_NAME})")
+        
+        return model
+        
     except Exception as e:
-        logger.error(f"❌ Error durante el startup: {e}")
-        raise
+        logger.error(f"❌ Error cargando modelo YOLO: {e}")
+        raise e
 
-# Endpoint raíz con info básica
-@app.get("/", response_model=Dict[str, str])
-async def root():
-    """Endpoint raíz con información de la API"""
-    return {
-        "message": "Ratoncito Pérez agente API",
-        "version": "1.0.0",
-        "description": "API REST para consultas turísticas de Madrid con IA/Ratoncito Pérez",
-        "docs": "/docs",
-        "endpoints": {
-            "guide": "/guide - Guía turística completa del Ratoncito Pérez",
-            "health": "/health - Estado de la API",
-            "locations": "/locations - Ubicaciones de ejemplo en Madrid"
-        }
-    }
+def preprocess_frame(frame: np.ndarray) -> np.ndarray:
+    """Preprocessar frame para YOLOv8 (ya no necesario, YOLO lo hace automáticamente)"""
+    return frame
 
-@app.get("/health")
-async def health_check():
-    """Endpoint de health check"""
-    global llm, vectorstore
+def postprocess_results(results, conf_threshold: float = CONF_THRESHOLD):
+    """Procesar resultados de YOLOv8 nativo"""
+    detections = []
     
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now(),
-        "components": {
-            "llm": "initialized" if llm else "not_initialized",
-            "vectorstore": "initialized" if vectorstore else "not_initialized"
-        }
-    }
+    for result in results:
+        # Obtener boxes, confianzas y clases
+        if result.boxes is not None:
+            boxes = result.boxes.xyxy.cpu().numpy()  # coordenadas x1,y1,x2,y2
+            confidences = result.boxes.conf.cpu().numpy()
+            classes = result.boxes.cls.cpu().numpy()
+            
+            for box, conf, cls in zip(boxes, confidences, classes):
+                if conf >= conf_threshold and int(cls) == RATONCITO_CLASS_ID:
+                    x1, y1, x2, y2 = box
+                    detection = {
+                        'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                        'confidence': float(conf),
+                        'class_id': int(cls),
+                        'class_name': RATONCITO_CLASS_NAME
+                    }
+                    detections.append(detection)
+    
+    return detections
 
-# Endpoint CrewAI guide turístico
+# ============== WEBSOCKET STREAMING ==============
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint para streaming de cámara con detección YOLOv8"""
+    await websocket.accept()
+    logger.info("🔌 WEBSOCKET CONECTADO - Análisis con YOLOv8 nativo")
+    
+    global model
+    if model is None:
+        await websocket.send_text(json.dumps({
+            "type": "error",
+            "message": "Modelo YOLO no disponible"
+        }))
+        return
+    
+    frame_count = 0
+    error_count = 0
+    start_time = time.time()
+    
+    try:
+        while True:
+            # Recibir frame del cliente con timeout
+            try:
+                # Agregar timeout de 30 segundos para evitar bucle infinito
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                
+                # Validar que los datos no estén vacíos o sean solo espacios
+                if not data or data.strip() == "":
+                    logger.warning("⚠️ Datos vacíos recibidos del WebSocket, ignorando...")
+                    continue
+                
+                # Detectar si los datos son una imagen directa o JSON
+                if data.strip().startswith('data:image/'):
+                    # Cliente envía imagen directamente, crear JSON wrapper
+                    #logger.info("📸 Recibida imagen directa, convirtiendo a formato JSON...")
+                    frame_data = {
+                        "type": "frame",
+                        "data": data.strip()
+                    }
+                elif data.strip().startswith('{'):
+                    # Datos parecen JSON, intentar parsear
+                    try:
+                        frame_data = json.loads(data)
+                        error_count = 0  # Reset counter en caso de éxito
+                    except json.JSONDecodeError as e:
+                        error_count += 1
+                        if error_count <= 5:  # Solo mostrar primeros 5 errores
+                            logger.error(f"❌ Error parsing JSON #{error_count}: {e}")
+                            logger.error(f"📄 Primeros 200 caracteres: {repr(data[:200])}")
+                            logger.error(f"📄 Últimos 50 caracteres: {repr(data[-50:])}")
+                            logger.error(f"📏 Longitud total: {len(data)} caracteres")
+                        elif error_count == 6:
+                            logger.error("❌ Demasiados errores JSON, silenciando logs...")
+                        continue
+                    except Exception as e:
+                        error_count += 1
+                        if error_count <= 5:
+                            logger.error(f"❌ Error inesperado procesando JSON #{error_count}: {e}")
+                        continue
+                else:
+                    # Datos no reconocidos
+                    logger.warning(f"⚠️ Formato de datos no reconocido: {data[:50]}...")
+                    continue
+                
+            except asyncio.TimeoutError:
+                logger.warning("⏰ Timeout esperando datos del cliente (30s)")
+                # Enviar ping para verificar conexión
+                try:
+                    await websocket.send_text(json.dumps({"type": "ping"}))
+                    logger.info("📡 Ping enviado al cliente")
+                except:
+                    logger.error("❌ Cliente desconectado (no se pudo enviar ping)")
+                    break
+                continue
+            except WebSocketDisconnect:
+                logger.info("🔌 Cliente desconectado normalmente")
+                break
+            except Exception as e:
+                logger.error(f"❌ Error recibiendo datos WebSocket: {e}")
+                break
+            
+            # Validar que frame_data es un diccionario válido
+            if not isinstance(frame_data, dict):
+                logger.error(f"❌ frame_data no es un diccionario: {type(frame_data)}")
+                continue
+            
+            # Validar que tiene el campo 'type'
+            if "type" not in frame_data:
+                logger.error("❌ Campo 'type' no encontrado en frame_data")
+                continue
+            
+            if frame_data.get("type") == "frame":
+                frame_count += 1
+                
+                try:
+                    # Validar que existe el campo data
+                    if "data" not in frame_data:
+                        logger.error("❌ Campo 'data' no encontrado en frame_data")
+                        continue
+                    
+                    # Decodificar imagen con mejor manejo de formatos
+                    image_data_str = frame_data["data"]
+                    #logger.info(f"📄 Procesando imagen: {len(image_data_str)} caracteres")
+                    
+                    try:
+                        # Remover prefijo data:image si existe
+                        if "," in image_data_str and image_data_str.startswith('data:image/'):
+                            # Formato: data:image/jpeg;base64,XXXX
+                            base64_data = image_data_str.split(",")[1]
+                            #logger.info("🔧 Removido prefijo data:image/")
+                        else:
+                            # Asumir que es base64 puro
+                            base64_data = image_data_str
+                        
+                        # Decodificar base64
+                        image_data = base64.b64decode(base64_data)
+                        #logger.info(f"✅ Base64 decodificado: {len(image_data)} bytes")
+                        
+                        # Convertir a imagen
+                        image = Image.open(BytesIO(image_data)).convert("RGB")
+                        frame = np.array(image)
+                        #logger.info(f"✅ Imagen procesada: {frame.shape}")
+                        
+                    except Exception as img_error:
+                        logger.error(f"❌ Error específico procesando imagen: {img_error}")
+                        logger.error(f"📄 Muestra de datos: {image_data_str[:100]}...")
+                        continue
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error general procesando imagen en frame #{frame_count}: {e}")
+                    continue
+            
+            elif frame_data.get("type") == "ping":
+                # Responder al ping para mantener conexión viva
+                await websocket.send_text(json.dumps({"type": "pong"}))
+                logger.info("📡 Pong enviado en respuesta al ping del cliente")
+                continue
+            
+            elif frame_data.get("type") == "close":
+                # Cliente solicita cerrar conexión
+                logger.info("🔌 Cliente solicita cerrar conexión")
+                break
+                
+            else:
+                logger.warning(f"⚠️ Tipo de mensaje desconocido: {frame_data.get('type')}")
+                continue
+            
+            # Procesar frame (solo si llegamos aquí, es tipo "frame")
+            # Guardar solo los primeros 10 frames
+            #if frame_count <= 10:
+            #    print("Guardando frame de prueba...")
+            #    frame_filename = f"frame_{frame_count:03d}.jpg"
+            #    cv2.imwrite(frame_filename, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+            #    logger.info(f"💾 Frame #{frame_count} guardado como {frame_filename}")
+            # Estadísticas del frame
+            brightness = np.mean(frame)
+            h, w = frame.shape[:2]
+            #logger.info(f"📸 Frame #{frame_count}: {w}x{h}, Brillo: {brightness:.1f}")
+            
+            # YOLOv8 - Predicción cada 30 frames
+            detections = []
+            
+            if frame_count % 30 == 0:
+                logger.info("🚀 ===== USANDO YOLOv8 NATIVO =====")
+                logger.info("🎯 model.predict() - Iniciando predicción...")
+            
+            try:
+                # ¡AQUÍ ESTÁ! La sintaxis que querías: model.predict()
+                results = model.predict(
+                    source=frame,
+                    conf=CONF_THRESHOLD,
+                    show=False,
+                    save=False,
+                    verbose=False
+                )
+                
+                #logger.info(f"   📋 Parámetros: conf={CONF_THRESHOLD}, show=False, save=False")
+                
+                # Procesar resultados
+                detections = postprocess_results(results, CONF_THRESHOLD)
+                
+                #logger.info("🎯 model.predict() ejecutado exitosamente!")
+                logger.info(f"📊 Resultados: {len(detections)} Ratoncitos Pérez detectados")
+                
+                # Dibujar bounding boxes en la imagen si hay detecciones
+                annotated_frame = frame.copy()
+                if detections:
+                    logger.info(f"✅ model.predict() detectó {len(detections)} Ratoncitos Pérez en frame #{frame_count}")
+                    for i, det in enumerate(detections):
+                        logger.info(f"  🐭 Ratoncito {i+1}: Confianza {det['confidence']:.3f}")
+                        
+                        # Dibujar bounding box
+                        x1, y1, x2, y2 = map(int, det['bbox'])
+                        
+                        # Dibujar rectángulo
+                        cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        
+                        # Dibujar etiqueta con confianza
+                        label = f"Ratoncito Perez {det['confidence']:.2f}"
+                        label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                        
+                        # Fondo para el texto
+                        cv2.rectangle(annotated_frame, (x1, y1-25), (x1 + label_size[0], y1), (0, 255, 0), -1)
+                        
+                        # Texto
+                        cv2.putText(annotated_frame, label, (x1, y1-5), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+                #else:
+                    #logger.info(f"❌ model.predict() no detectó Ratoncito Pérez en frame #{frame_count}")
+                
+                # Convertir imagen anotada a base64 para enviar al frontend
+                annotated_image = Image.fromarray(annotated_frame)
+                buffered = BytesIO()
+                annotated_image.save(buffered, format="JPEG", quality=70)
+                annotated_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                annotated_data_url = f"data:image/jpeg;base64,{annotated_base64}"
+
+            except Exception as e:
+                logger.error(f"❌ Error en model.predict(): {e}")
+
+            
+            # Estadísticas de FPS
+            if frame_count % 10 == 0:
+                elapsed = time.time() - start_time
+                fps = frame_count / elapsed
+                logger.info(f"🎯 {frame_count} frames | {fps:.1f} FPS | {elapsed:.1f}s")
+            
+            # Enviar respuesta al cliente
+            try:
+                response = {
+                    "type": "detection",
+                    "frame_count": frame_count,
+                    "detections": detections,
+                    "fps": round(frame_count / (time.time() - start_time), 1) if frame_count > 0 else 0,
+                    "annotated_image": annotated_data_url if 'annotated_data_url' in locals() else None,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                await websocket.send_text(json.dumps(response))
+            
+            except Exception as e:
+                logger.error(f"❌ Error enviando respuesta WebSocket: {e}")
+                break
+                
+    except WebSocketDisconnect:
+        elapsed = time.time() - start_time
+        logger.info(f"🔌 Cliente desconectado después de {frame_count} frames en {elapsed:.1f}s")
+    except Exception as e:
+        logger.error(f"❌ Error en WebSocket: {e}")
+        await websocket.close()
+
+# ============== ENDPOINTS REST ==============
 @app.post("/guide", response_model=TourismResponse)
 async def generate_tourism_guide(query: TourismQuery):
     """
-    Generar guía turística completa usando el agente CrewAI
+    Generar guÃ­a turÃ­stica completa usando el agente CrewAI
     
-    - **query**: Consulta turística del usuario
-    - **lat/lon**: Coordenadas GPS opcionales para búsqueda local
-    - **radio_km**: Radio de búsqueda en kilómetros
-    - **categoria**: Filtro de categoría para lugares
+    - **query**: Consulta turÃ­stica del usuario
+    - **lat/lon**: Coordenadas GPS opcionales para bÃºsqueda local
+    - **radio_km**: Radio de bÃºsqueda en kilÃ³metros
+    - **categoria**: Filtro de categorÃ­a para lugares
     - **adulto/infantil/accesibilidad**: Filtros adicionales
     """
     global llm, vectorstore
@@ -285,13 +452,13 @@ async def generate_tourism_guide(query: TourismQuery):
     if not llm or not vectorstore:
         raise HTTPException(
             status_code=503, 
-            detail="Agente no inicializado. Intente más tarde."
+            detail="Agente no inicializado. Intente mÃ¡s tarde."
         )
     
     start_time = datetime.now()
     
     try:
-        logger.info(f"📝 Procesando consulta: {query.query}")
+        logger.info(f"ðŸ“ Procesando consulta: {query.query}")
         
         # Ejecutar el agente principal
         resultado = agent_main(
@@ -311,7 +478,7 @@ async def generate_tourism_guide(query: TourismQuery):
         
         return TourismResponse(
             success=True,
-            message="Guía turística generada exitosamente",
+            message="GuÃ­a turÃ­stica generada exitosamente",
             data={
                 "guide": resultado,
                 "query_params": query.dict(),
@@ -322,57 +489,12 @@ async def generate_tourism_guide(query: TourismQuery):
         )
         
     except Exception as e:
-        logger.error(f"❌ Error generando guía: {e}")
+        logger.error(f"âŒ Error generando guÃ­a: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error interno generando guía turística: {str(e)}"
+            detail=f"Error interno generando guÃ­a turÃ­stica: {str(e)}"
         )
 
-async def run_agent(prompt: str, context: dict) -> tuple[str, str]:
-    # Sustituye por tu CrewAI real
-    model_name = "perez-crew-stub"
-    resp = f"¡Chiiist! Soy el Ratoncito Pérez 🧀. Me dijiste: '{prompt}'. "\
-           f"¿Te apetece visitar mi Casa Museo cerca de Sol?"
-    return resp, model_name
-
-@app.post("/agent/chat", response_model=ChatOut)
-async def agent_chat(payload: ChatIn, request: Request):
-    # DEBUG temporal: imprime lo que ha llegado “en bruto”
-    try:
-        raw = await request.body()
-        print("RAW BODY:", raw[:200])  # primeros bytes
-    except Exception as e:
-        print("Error leyendo body:", e)
-    # Guarda el chat y devuelve la respuesta
-    await store.ensure_user(
-        user_id=payload.user_id,
-        profile_type=payload.profile_type,
-        has_mobility_issues=payload.pmr,
-        age_range=payload.age_range,
-    )
-    ctx = payload.model_dump()
-    response_text, model_name = await run_agent(payload.prompt, ctx)
-    turn_id = await store.save_chat_turn(payload.user_id, payload.prompt, response_text, model=model_name)
-    return ChatOut(
-        id=turn_id,
-        user_id=payload.user_id,
-        prompt=payload.prompt,
-        response=response_text,
-        model=model_name,
-        created_at=datetime.now(timezone.utc).isoformat(),
-    )
-
-@app.get("/agent/history")
-async def agent_history(user_id: str = Query(...), limit: int = Query(20, ge=1, le=100)):
-    items = await store.get_chat_history(user_id=user_id, limit=limit)
-    return {"user_id": user_id, "items": items}
-
-@app.get("/agent/turn/{turn_id}")
-async def agent_turn(turn_id: str):
-    item = await store.get_chat_turn(turn_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="chat turn not found")
-    return item
 @app.get("/forecast")
 async def get_forecast(lat: float, lon: float):
     response = get_weather_forecast_json(lat, lon, 1)
@@ -380,7 +502,7 @@ async def get_forecast(lat: float, lon: float):
     if response.status_code == 200:
         data = response.json().get("daily", {})
                 
-        forecast = WEATHER_CODES.get(data["weather_code"][0], 'Condición desconocida')
+        forecast = WEATHER_CODES.get(data["weather_code"][0], 'CondiciÃ³n desconocida')
         max = data['temperature_2m_max'][0]
         min = data['temperature_2m_min'][0]
         
@@ -399,104 +521,48 @@ async def get_sample_locations():
         "Palacio Real": {"lat": 40.4180, "lon": -3.7144},
         "Parque del Retiro": {"lat": 40.4153, "lon": -3.6844},
         "Plaza Mayor": {"lat": 40.4155, "lon": -3.7074},
-        "Gran Vía": {"lat": 40.4200, "lon": -3.7025},
-        "Estadio Santiago Bernabéu": {"lat": 40.4530, "lon": -3.6883},
+        "Gran VÃ­a": {"lat": 40.4200, "lon": -3.7025},
+        "Estadio Santiago BernabÃ©u": {"lat": 40.4530, "lon": -3.6883},
         "Aeropuerto Barajas": {"lat": 40.4719, "lon": -3.5626}
     }
     
     return {
         "success": True,
         "locations": ubicaciones,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now()
     }
 
 
-# Endpoint para verificar el estado del vectorstore o cache de ubicaciones
-@app.get("/vectorstore/status", tags=["vectorstore"])
-def vectorstore_status():
-    d = _vstore_dir()
-    exists = _cache_exists(d)
-    ttl_raw = os.getenv("LOCATION_VECTORSTORE_TTL_DAYS")
-    ttl = int(ttl_raw) if ttl_raw else None
-    age = _cache_age_seconds(d) if exists else None
-    stale = (ttl is not None and age is not None and age > ttl*86400)
-    # Usa el flag; si no existiera por cualquier motivo, cae a un cálculo razonable
-    ready = getattr(app.state, "vectorstore_ready", (exists and not stale))
-    return {"dir": d, "exists": exists, "ttl_days": ttl, "age_seconds": age, "stale": stale, "ready": ready}
+@app.get("/")
+async def root():
+    """Endpoint de prueba"""
+    return {
+        "message": "Ratoncito Pérez Madrid API",
+        "version": "2.0.0",
+        "status": "active",
+        "yolo_model": YOLO_FILENAME,
+        "yolo_repo": YOLO_REPO_ID,
+        "target_class": RATONCITO_CLASS_NAME,
+        "device": "cuda" if torch.cuda.is_available() else "cpu"
+    }
 
-# === ENDPOINTS PRINCIPALES: Ubicación + Recomendaciones ===
-@app.post("/users/location")
-async def users_location(loc: LocationIn):
-    """Guardar ubicación con TTL (por defecto 3 días; o usa DB_TTL_DAYS si la pones en .env)"""
-    import os
-    ttl = int(os.getenv("DB_TTL_DAYS", "3"))
-    if ttl <= 0:
-        ttl = 3
-    await save_location(
-        user_id=loc.user_id,
-        lat=loc.latitude,
-        lon=loc.longitude,
-        ttl_days=ttl,
-        profile_type=loc.profile_type,
-        has_mobility_issues=loc.pmr,
-        age_range=loc.age_range,
-    )
-    return {"ok": True}
+@app.get("/health")
+async def health():
+    """Endpoint de salud"""
+    global model
+    return {
+        "status": "healthy",
+        "model_loaded": model is not None,
+        "cuda_available": torch.cuda.is_available(),
+        "timestamp": datetime.now().isoformat()
+    }
 
-@app.get("/recommendations")
-async def get_recommendations(
-    user_id: str = Query(..., description="ID del usuario"),
-    latitude: float = Query(..., description="Latitud actual"),
-    longitude: float = Query(..., description="Longitud actual"),
-    radius_m: int = Query(1000, ge=10, le=50000, description="Radio en metros"),
-    pmr: bool = Query(False, description="Movilidad reducida"),
-    age_range: str | None = Query(None, description="Rango de edad (p.ej. '7-9')"),
-    k: int = Query(3, ge=1, le=10, description="Número de sugerencias"),
-):
-    """
-    Devuelve los k POIs más cercanos (con scoring por distancia/PMR/edad).
-    GET con parámetros en la query: ?user_id=...&latitude=...&longitude=...&pmr=true...
-    """
-    items = await store.top_pois(
-        lat=latitude,
-        lon=longitude,
-        radius_m=radius_m,
-        pmr=pmr,
-        age_range=age_range,
-        k=k,
-    )
-    return {"items": items, "meta": {"user_id": user_id, "radius_m": radius_m, "k": k}}
-
-
-
-# Función para ejecutar el servidor
-def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
-    """
-    Ejecutar el servidor FastAPI
-    
-    Args:
-        host: Host donde ejecutar el servidor
-        port: Puerto donde ejecutar el servidor  
-        reload: Si activar el auto-reload para desarrollo
-    """
-    print("🌟 Ratoncito Pérez API")
-    print(f"🚀 Iniciando servidor en http://{host}:{port}")
-    print(f"📚 Documentación en http://{host}:{port}/docs")
-    print("💡 Ctrl+C para detener el servidor")
-    
+# ============== INICIAR SERVIDOR ==============
+if __name__ == "__main__":
     uvicorn.run(
         "app:app",
-        host=host,
-        port=port,
-        reload=reload,
-        log_level="info"
-    )
-
-if __name__ == "__main__":
-    # Configuración para desarrollo
-    run_server(
         host="127.0.0.1",
         port=8000,
-        reload=True
+        reload=True,
+        log_level="info"
     )
-
