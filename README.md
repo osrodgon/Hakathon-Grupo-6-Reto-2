@@ -12,7 +12,7 @@
 
 ## 📖 Descripción
 
-Una aplicación web interactiva que combina la magia del **Ratoncito Pérez** con la rica historia y cultura de **Madrid**, creando experiencias únicas para familias que visitan la ciudad. El proyecto utiliza inteligencia artificial avanzada (CrewAI + Google Gemini) para proporcionar recomendaciones personalizadas de turismo.
+Una aplicación web interactiva que combina la magia del **Ratoncito Pérez** con la rica historia y cultura de **Madrid**, creando experiencias únicas para familias que visitan la ciudad. El proyecto utiliza inteligencia artificial (agentes) avanzada (CrewAI + Google Gemini) para proporcionar recomendaciones personalizadas de turismo.
 
 ### ✨ Características Principales
 
