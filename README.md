@@ -1,5 +1,5 @@
 # 🏰 Ratoncito Pérez Tourism Agent - Madrid Experience
-- hakathon (Alveariun - Factoría F5 - MIL): 12-09-2025
+- hackatón (Alveariun - Factoría F5 - MIL): 12-09-2025
 # MagicPerez - El gran viaje del ratón pérez
 
 <div align="center">
