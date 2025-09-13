@@ -3,6 +3,7 @@ import { Sparkles, Heart, User } from 'lucide-react';
 import Button from '../components/common/Button';
 import Card, { CardTitle, CardContent } from '../components/common/Card';
 import { COLORS, FONTS } from '../config/constants';
+import app4 from '../images/app4.png';
 
 /**
  * Página de configuración del perfil de usuario
@@ -37,12 +38,13 @@ const ProfilePage = ({ userProfile, updateProfile, onComplete }) => {
   const handleAccessibilityChange = (accessibility) => {
     updateProfile({ accessibility });
   };
-
   /**
    * Completa la configuración del perfil
    */
   const handleComplete = () => {
-    updateProfile({ isFirstTime: false });
+    if (userProfile.isFirstTime) {
+      updateProfile({ isFirstTime: false });
+    }
     onComplete();
   };
 
@@ -52,13 +54,13 @@ const ProfilePage = ({ userProfile, updateProfile, onComplete }) => {
       style={{ backgroundColor: COLORS.BACKGROUND }}
     >
       <div className="max-w-md mx-auto">
-        
-        {/* Encabezado de bienvenida */}
+          {/* Encabezado de bienvenida */}
         <div className="text-center mb-8">
           <div className="animate-bounce-soft mb-4">
-            <Sparkles 
-              className="w-16 h-16 mx-auto"
-              style={{ color: COLORS.PRIMARY_BROWN }} 
+            <img 
+              src={app4} 
+              alt="Perfil Aventurero" 
+              className="w-40 h-40 mx-auto object-contain"
             />
           </div>
           
@@ -220,20 +222,32 @@ const ProfilePage = ({ userProfile, updateProfile, onComplete }) => {
                 </div>
               </CardContent>
             </Card>
-          )}
-
-          {/* Botón para continuar */}
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={handleComplete}
-            className="w-full"
-          >
-            {userProfile.language === 'en' 
-              ? '✨ Start Adventure!' 
-              : '✨ ¡Comenzar Aventura!'
-            }
-          </Button>
+          )}          {/* Botones para continuar */}
+          <div className="space-y-3">
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleComplete}
+              className="w-full"
+            >
+              {userProfile.isFirstTime 
+                ? (userProfile.language === 'en' ? '✨ Start Adventure!' : '✨ ¡Comenzar Aventura!')
+                : (userProfile.language === 'en' ? '💾 Save Changes' : '💾 Guardar Cambios')
+              }
+            </Button>
+            
+            {/* Botón volver solo si no es primera vez */}
+            {!userProfile.isFirstTime && (
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={onComplete}
+                className="w-full"
+              >
+                {userProfile.language === 'en' ? '← Back' : '← Volver'}
+              </Button>
+            )}
+          </div>
 
           {/* Información de privacidad */}
           <div className="text-center">

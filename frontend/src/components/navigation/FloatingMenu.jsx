@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, User, Home, MessageCircle, Map, Users, Camera } from 'lucide-react';
+import { Play, User, Home, MessageCircle, Map, Users } from 'lucide-react';
 import { COLORS } from '../../config/constants';
 
 /**
@@ -29,12 +29,6 @@ const FloatingMenu = ({ onNavigate, currentScreen }) => {
       id: 'chat', 
       icon: MessageCircle, 
       label: 'Chat',
-      color: COLORS.SECONDARY_BLUE 
-    },
-    { 
-      id: 'camera', 
-      icon: Camera, 
-      label: 'Cámara',
       color: COLORS.SECONDARY_BLUE 
     },
     { 
