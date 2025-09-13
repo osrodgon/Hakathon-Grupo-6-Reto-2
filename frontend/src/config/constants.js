@@ -46,3 +46,10 @@ export const ANIMATIONS = {
   DURATION_SLOW: '500ms',
   EASING: 'cubic-bezier(0.4, 0, 0.2, 1)'
 };
+
+/**
+ * Configuración de la API del backend
+ */
+export const API_CONFIG = {
+  BASE_URL: 'http://127.0.0.1:8000'
+};

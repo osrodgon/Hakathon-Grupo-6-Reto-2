@@ -465,8 +465,36 @@ def get_weather_forecast(latitude: float, longitude: float, forecast_days: int =
     else:
         return f"❌ Error en consulta a Open-Meteo: {response.status_code}"
 
+
+
 def main(user_query, llm, vectorstore, lat=None, lon=None, radio_km=1.0, 
-         categoria_foursquare="turismo", infantil=False, adulto=False, accesibilidad=False):
+         categoria_foursquare="turismo", infantil=True, adulto=False, accesibilidad=False):
+    
+    # Inicializar clima con valor por defecto
+    clima = "Información climática no disponible"
+    
+    # Solo obtener el clima si tenemos coordenadas válidas
+    if lat is not None and lon is not None:
+        try:
+            response = get_weather_forecast_json(lat, lon, 1)
+            if response and response.status_code == 200:
+                data = response.json().get("daily", {})
+                if data and "weather_code" in data and len(data["weather_code"]) > 0:
+                    forecast = WEATHER_CODES.get(data["weather_code"][0], 'Condición desconocida')
+                    max_temp = data['temperature_2m_max'][0]
+                    min_temp = data['temperature_2m_min'][0]
+                    # Combinar toda la información del clima en un único resultado
+                    clima = f"{forecast} - Máx: {max_temp}°C, Mín: {min_temp}°C"
+                else:
+                    clima = "Datos climáticos no disponibles"
+            else:
+                clima = "Error al obtener datos climáticos"
+        except Exception as e:
+            print(f"⚠️ Error obteniendo clima: {e}")
+            clima = "Información climática no disponible"
+    else:
+        print("ℹ️ Coordenadas no proporcionadas, usando información climática genérica")
+        clima = "Consulta el tiempo antes de tu visita"
     """
     Función principal con 2 agentes especializados CrewAI
     """
@@ -530,19 +558,25 @@ def main(user_query, llm, vectorstore, lat=None, lon=None, radio_km=1.0,
     research_task = Task(
         description=(
             f"INVESTIGACIÓN CULTURAL COMPLETA sobre: {user_query}\n\n"
+            f"CONTEXTO ADICIONAL:\n"
+            f"- Clima actual: {clima}\n"
+            f"- Categoría de interés: {categoria_foursquare}\n"
+            f"- Coordenadas disponibles: {lat}, {lon} (Radio: {radio_km}km)\n\n"
             f"OBJETIVOS:\n"
             f"1. Recopilar información histórica precisa: fechas, personajes, eventos\n"
             f"2. Buscar datos prácticos actualizados: horarios, precios, accesibilidad\n"
             f"3. Identificar curiosidades y anécdotas verificables\n"
-            f"4. Localizar lugares cercanos de interés (si hay coordenadas: {lat}, {lon})\n"
-            f"5. Obtener información de transporte y logística\n\n"
+            f"4. Localizar lugares cercanos de interés relacionados con '{categoria_foursquare}'\n"
+            f"5. Considerar las condiciones climáticas actuales para las recomendaciones\n"
+            f"6. Obtener información de transporte y logística\n\n"
             f"FUENTES A UTILIZAR:\n"
             f"- PDFs oficiales de Madrid (archivo especializado)\n"
             f"- Internet para información actualizada\n"
             f"- OpenStreetMap para lugares cercanos\n\n"
-            f"Proporciona información sólida y verificable que será la base para la experiencia familiar."
+            f"Proporciona información sólida y verificable que será la base para la experiencia familiar, "
+            f"considerando el clima actual ({clima}) y enfocándose en '{categoria_foursquare}'."
         ),
-        expected_output="Documento estructurado en Markdown con: 1) Información histórica verificada, 2) Datos prácticos actualizados, 3) Curiosidades interesantes, 4) Lugares cercanos relevantes, 5) Información de transporte y logística. Que no supere las 500 palabras.",
+        expected_output="Documento estructurado en Markdown con: 1) Información histórica verificada, 2) Datos prácticos actualizados, 3) Curiosidades interesantes, 4) Lugares cercanos relevantes, 5) Información de transporte y logística, 6) Recomendaciones según el clima actual. Que no supere las 500 palabras.",
         agent=madrid_researcher,
         tools=[pdf_search_tool, internet_search_tool, location_search_tool]
     )
@@ -551,21 +585,30 @@ def main(user_query, llm, vectorstore, lat=None, lon=None, radio_km=1.0,
     family_experience_task = Task(
         description=(
             f"CREAR EXPERIENCIA FAMILIAR MÁGICA basada en la investigación sobre: {user_query}\n\n"
+            f"CONTEXTO IMPORTANTE:\n"
+            f"- Clima actual: {clima}\n"
+            f"- Categoría de interés: {categoria_foursquare}\n"
+            f"- Ubicación: {lat}, {lon} (Radio: {radio_km}km)\n"
+            f"- Tipo de usuario: {'Infantil' if infantil else 'Adulto' if adulto else 'General'}\n"
+            f"- Accesibilidad requerida: {'Sí' if accesibilidad else 'No'}\n\n"
             f"OBJETIVOS:\n"
             f"1. Transformar datos históricos en narrativa del Ratón Pérez\n"
             f"2. Diseñar 2-3 actividades interactivas para diferentes edades\n"
             f"3. Crear un acertijo o búsqueda del tesoro relacionada\n"
-            f"4. Proporcionar consejos prácticos para familias\n"
-            f"5. Incluir recomendaciones de horarios y presupuesto\n\n"
+            f"4. Adaptar recomendaciones al clima actual ({clima})\n"
+            f"5. Enfocar actividades en la categoría '{categoria_foursquare}'\n"
+            f"6. Proporcionar consejos prácticos para familias\n"
+            f"7. Incluir recomendaciones de horarios y presupuesto\n\n"
             f"ELEMENTOS REQUERIDOS:\n"
             f"- Historia protagonizada por el Ratón Pérez en primera persona\n"
-            f"- Actividades para niños (6-12 años) y adolescentes\n"
+            f"- Actividades adaptadas al clima y categoría de interés\n"
             f"- Acertijo con pistas y solución\n"
-            f"- Consejos de vestimenta y equipamiento\n"
+            f"- Consejos de vestimenta según el clima\n"
             f"- Momentos fotográficos especiales\n"
-            f"- Información sobre lugares cercanos para comer/descansar"
+            f"- Información sobre lugares cercanos para comer/descansar\n"
+            f"- Consideraciones especiales de accesibilidad si es necesario"
         ),
-        expected_output="Guía familiar completa en formato Markdown con: 1) Historia narrada por el Ratón Pérez en primera persona, 2) Actividades interactivas paso a paso, 3) Acertijo con pistas y solución, 4) Consejos prácticos completos",
+        expected_output="Guía familiar completa en formato Markdown con: 1) Historia narrada por el Ratón Pérez en primera persona, 2) Actividades interactivas adaptadas al clima y categoría, 3) Acertijo con pistas y solución, 4) Consejos prácticos completos incluyendo vestimenta según el clima",
         agent=family_guide_creator,
         tools=[location_search_tool],
         context=[research_task]  # Depende de la investigación

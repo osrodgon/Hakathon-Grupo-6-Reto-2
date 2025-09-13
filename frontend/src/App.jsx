@@ -10,6 +10,7 @@ import HomePage from './pages/HomePage';
 import ChatPage from './pages/ChatPage';
 import MapPage from './pages/MapPage';
 import AboutPage from './pages/AboutPage';
+import CameraPage from './pages/CameraPage';
 
 // Importar componentes
 import FloatingMenu from './components/navigation/FloatingMenu';
@@ -193,6 +194,14 @@ const App = () => {
       case 'about':
         return (
           <AboutPage
+            userProfile={userProfile}
+            onNavigate={handleNavigation}
+          />
+        );
+
+      case 'camera':
+        return (
+          <CameraPage
             userProfile={userProfile}
             onNavigate={handleNavigation}
           />

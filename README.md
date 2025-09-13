@@ -79,6 +79,7 @@ Una aplicación web interactiva que combina la magia del **Ratoncito Pérez** co
    ```
 
 4. **Configura las variables de entorno**
+- Para la obtención de key es esta dirección: [Generar api key](https://aistudio.google.com/apikey)
    ```powershell
    # Crea un archivo .env en la carpeta backend/
    echo "GOOGLE_API_KEY=tu_api_key_aqui" > .env
@@ -253,6 +254,7 @@ allow_origins=["http://localhost:3000"]
 echo $env:GOOGLE_API_KEY  # Windows PowerShell
 ```
 
+
 ## 👥 Autores
 
 **Grupo 6 - Factoría F5 Alvearium**
@@ -270,15 +272,14 @@ echo $env:GOOGLE_API_KEY  # Windows PowerShell
 
 Este proyecto está licenciado bajo la **Licencia MIT** - ver el archivo [LICENSE](LICENSE) para más detalles.
 
-## 🙏 Agradecimientos
 
+## 🙏 Agradecimientos
 
 - **Factoría F5** por la oportunidad del hackathon
 - **CrewAI** por el framework de agentes IA
 - **Google** por la API de Gemini
 - **OpenStreetMap** por los datos geográficos
 - **Comunidad Open Source** por las librerías utilizadas
-
 
 ---
 
