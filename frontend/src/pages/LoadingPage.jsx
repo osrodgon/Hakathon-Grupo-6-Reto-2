@@ -32,10 +32,10 @@ const LoadingPage = ({ onComplete }) => {
       setLoadingMessage(randomMessage);
     }, 2000);
 
-    // Completar carga después de 6 segundos
+    // Completar carga después de 4.5 segundos
     const loadingTimer = setTimeout(() => {
       onComplete();
-    }, 6000);
+    }, 4500);
 
     // Cleanup
     return () => {

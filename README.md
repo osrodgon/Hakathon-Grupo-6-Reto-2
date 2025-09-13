@@ -272,6 +272,7 @@ echo $env:GOOGLE_API_KEY  # Windows PowerShell
 
 Este proyecto está licenciado bajo la **Licencia MIT** - ver el archivo [LICENSE](LICENSE) para más detalles.
 
+
 ## 🙏 Agradecimientos
 
 - **Factoría F5** por la oportunidad del hackathon
