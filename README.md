@@ -79,6 +79,7 @@ Una aplicación web interactiva que combina la magia del **Ratoncito Pérez** co
    ```
 
 4. **Configura las variables de entorno**
+- Para la obtención de key es esta dirección: [Generar api key](https://aistudio.google.com/apikey)
    ```powershell
    # Crea un archivo .env en la carpeta backend/
    echo "GOOGLE_API_KEY=tu_api_key_aqui" > .env
